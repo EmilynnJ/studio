@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 
 export interface AppUser {
@@ -10,5 +11,6 @@ export interface AppUser {
   status?: 'online' | 'offline' | 'busy'; // Reader availability status
   ratePerMinute?: number; // For readers, e.g., price in USD per minute
   balance?: number; // For clients, their available funds for sessions
+  token?: string; // Optional: Firebase ID token for backend auth
 }
 

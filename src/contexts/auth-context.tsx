@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -10,6 +11,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
+  getIdToken,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/firebase';
@@ -38,6 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const userDocSnap = await getDoc(userDocRef);
+        const token = await getIdToken(firebaseUser);
+
 
         if (userDocSnap.exists()) {
           const customData = userDocSnap.data();
@@ -51,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             status: customData.status || (customData.role === 'reader' ? 'offline' : undefined),
             balance: customData.balance || (customData.role === 'client' ? 100 : undefined), // Default client balance for demo
             ratePerMinute: customData.ratePerMinute,
+            token: token,
           });
         } else {
           // This case should ideally not happen if signup creates the user doc properly
@@ -62,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: null, 
             status: undefined,
             balance: undefined, // Or a default if applicable
+            token: token,
           });
           console.warn(`No Firestore document found for user ${firebaseUser.uid}. This might indicate an issue with signup.`);
         }
@@ -95,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await updateProfile(firebaseUser, { displayName: name_signup });
 
       const userDocRef = doc(db, 'users', firebaseUser.uid);
-      const userData: AppUser = {
+      const userData: Omit<AppUser, 'token'> = { // Exclude token initially, it's added on auth state change
         uid: firebaseUser.uid,
         email: email_signup,
         name: name_signup,

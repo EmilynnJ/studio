@@ -28,6 +28,7 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_STRIPE_PUBLIC_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY,
     NEXT_PUBLIC_WEBRTC_ICE_SERVERS: process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS,
+    NEXT_PUBLIC_SIGNALING_SERVER_URL: process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL,
     // STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SIGNING_SECRET should NOT be added here
     // as they are server-side only and exposing them client-side is a security risk.
     // They will be accessed directly via process.env on the server (e.g., in API routes).
