@@ -59,7 +59,18 @@ body {
     --sidebar-accent-foreground: 300 30% 95%;
     --sidebar-border: 270 40% 25%;
     --sidebar-ring: var(--ring);
+
+    --header-height: 4rem; /* 64px for small screens */
+    --footer-height: 15rem; /* Approximate footer height for small screens */
   }
+
+  @media (min-width: 640px) { /* sm breakpoint */
+    :root {
+      --header-height: 5rem; /* 80px for sm and up */
+       --footer-height: 13rem; /* Approximate footer height for larger screens */
+    }
+  }
+
 }
 
 @layer base {
@@ -72,88 +83,85 @@ body {
   }
 
   /* Global background image for the app */
-  body.app-background { /* Changed to body.app-background to ensure specificity */
+  body.app-background { 
     background-image: url('https://i.postimg.cc/8cjhG9Dw/background-image.png'); 
     background-size: cover;
     background-attachment: fixed;
     background-position: center;
-    position: relative; /* Needed for z-indexing of pseudo-elements */
+    position: relative; 
   }
   
-  /* Add a subtle overlay to improve text readability over the background */
   body.app-background::before {
     content: '';
-    position: fixed; /* Cover the entire viewport */
+    position: fixed; 
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: hsla(var(--background), 0.75); /* Semi-transparent overlay using theme background color */
-    z-index: -10; /* Behind all content */
+    background-color: hsla(var(--background), 0.75); 
+    z-index: -10; 
   }
   
-  /* Ensure main content area is above the ::before pseudo-element if it's on body */
    main, header, footer {
     position: relative;
     z-index: 1;
   }
 
-
-  h1, h2, h3, h4, h5, h6, .page-title-text { /* Added .page-title-text for explicit targeting */
+  h1, h2, h3, h4, h5, h6, .page-title-text { 
     font-family: var(--font-alex-brush), cursive;
     color: hsl(var(--soulseer-header-pink));
   }
   
-  /* Specific styling for main headers if PageTitle component isn't used everywhere */
   .main-header-text {
     font-family: var(--font-alex-brush), cursive;
     color: hsl(var(--soulseer-header-pink));
   }
 
-  /* Taglines and body text */
   p, span, div, li, label, button, input, textarea, select, a {
     font-family: var(--font-playfair-display), serif;
   }
 
   .soulseer-tagline {
     font-family: var(--font-playfair-display), serif;
-    font-size: 1.25rem; /* Example size */
+    font-size: 1.125rem; /* Adjusted for slightly better mobile */
+    @media (min-width: 640px) { /* sm breakpoint */
+      font-size: 1.25rem;
+    }
     color: hsl(var(--foreground) / 0.9);
     text-shadow: 1px 1px 3px hsla(var(--background), 0.5);
   }
 }
 
-/* Styling for smooth scroll behavior */
 html {
   scroll-behavior: smooth;
 }
 
-/* Custom scrollbar for a more thematic feel */
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 8px; /* Slightly thinner for a cleaner look */
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: hsl(var(--background) / 0.7);
+  background: hsl(var(--background) / 0.5); /* More subtle track */
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--primary) / 0.6);
+  background: hsl(var(--primary) / 0.5); /* More subtle thumb */
   border-radius: 10px;
-  border: 2px solid hsl(var(--background) / 0.7);
+  border: 1px solid hsl(var(--background) / 0.5); /* Subtle border */
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.7); /* Slightly darker on hover */
 }
 
-/* Additional style for tab active indicator from image */
+
 .soulseer-tabs-trigger[data-state="active"] {
   border-bottom-color: hsl(var(--soulseer-gold)) !important;
   color: hsl(var(--soulseer-gold)) !important;
-  background-color: transparent !important; /* Ensure primary background isn't interfering */
+  background-color: transparent !important; 
 }
 
 .soulseer-tabs-trigger {
-  padding-bottom: 0.5rem; /* Adjust as needed */
+  padding-bottom: 0.5rem; 
   border-bottom-width: 2px;
   border-bottom-style: solid;
   border-bottom-color: transparent;
@@ -165,8 +173,14 @@ html {
 
 .soulseer-section-title {
   font-family: var(--font-alex-brush), cursive;
-  font-size: 2.5rem; /* 40px */
+  font-size: 2rem; /* Adjusted for mobile */
+   @media (min-width: 768px) { /* md breakpoint */
+    font-size: 2.5rem; /* 40px */
+  }
   color: hsl(var(--primary));
-  margin-bottom: 1.5rem; /* 24px */
-  text-align: left; /* As per image "Featured Products" styling */
+  margin-bottom: 1rem; /* Adjusted for mobile */
+   @media (min-width: 768px) { /* md breakpoint */
+     margin-bottom: 1.5rem; /* 24px */
+  }
+  text-align: left; 
 }

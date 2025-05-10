@@ -10,7 +10,7 @@ export function PageTitle({ className, children, as: Component = 'h1', ...props 
   return (
     <Component
       className={cn(
-        'text-4xl md:text-5xl lg:text-6xl font-alex-brush text-center my-8 tracking-wider page-title-text', // Added page-title-text
+        'text-4xl sm:text-5xl md:text-5xl lg:text-6xl font-alex-brush text-center my-6 sm:my-8 tracking-wider page-title-text',
         'text-[hsl(var(--soulseer-header-pink))]', 
         className
       )}

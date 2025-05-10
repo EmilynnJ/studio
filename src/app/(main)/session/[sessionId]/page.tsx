@@ -10,7 +10,7 @@ import { db } from '@/lib/firebase/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Video, Mic, MicOff, VideoOff, PhoneOff, Loader2, MessageSquare, Send, User, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Video, Mic, MicOff, VideoOff, PhoneOff, Loader2, MessageSquare, Send, User, AlertTriangle, CheckCircle, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageTitle } from '@/components/ui/page-title';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -90,8 +90,8 @@ const VideoCallPage: NextPage = () => {
   const [mediaPermissionsStatus, setMediaPermissionsStatus] = useState<'prompt' | 'granted' | 'denied' | 'not_needed'>('prompt');
   const [callRole, setCallRole] = useState<CallRole>('unknown');
   const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false); // User-controlled video status
-  const [remoteVideoActuallyOff, setRemoteVideoActuallyOff] = useState(true); // Reflects actual remote video state
+  const [isVideoOff, setIsVideoOff] = useState(false); 
+  const [remoteVideoActuallyOff, setRemoteVideoActuallyOff] = useState(true); 
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -100,11 +100,10 @@ const VideoCallPage: NextPage = () => {
 
   const determinedSessionType = sessionData?.sessionType || 'video';
 
-  const isLoading = callStatus === 'idle' || callStatus === 'loading_session' || callStatus === 'waiting_permission'; // Removed 'determining_role' as it's part of loading_session
+  const isLoading = callStatus === 'idle' || callStatus === 'loading_session' || callStatus === 'waiting_permission';
   const isMediaSession = determinedSessionType === 'video' || determinedSessionType === 'audio';
 
 
-  // 1. Fetch Session Data and Determine Role
   useEffect(() => {
     if (!currentUser || !sessionId) return;
     setCallStatus('loading_session');
@@ -148,12 +147,11 @@ const VideoCallPage: NextPage = () => {
     return () => unsubscribe();
   }, [currentUser, sessionId, router, toast]);
   
-  // Set initial Mute/VideoOff states based on sessionType
   useEffect(() => {
     if (sessionData) {
       const type = sessionData.sessionType || 'video';
       if (type === 'audio') {
-        setIsVideoOff(true); // Start with video off for audio sessions
+        setIsVideoOff(true); 
       } else if (type === 'chat') {
         setIsVideoOff(true);
         setIsMuted(true); 
@@ -162,7 +160,6 @@ const VideoCallPage: NextPage = () => {
   }, [sessionData]);
 
 
-  // 2. Request Camera/Microphone Permissions based on sessionType
   useEffect(() => {
     if (callStatus !== 'waiting_permission' || callRole === 'unknown' || !sessionData) return;
 
@@ -171,7 +168,7 @@ const VideoCallPage: NextPage = () => {
       
       if (type === 'chat') {
         setMediaPermissionsStatus('not_needed');
-        setCallStatus('permission_granted'); // Effectively, permission granted
+        setCallStatus('permission_granted'); 
         return;
       }
 
@@ -182,8 +179,7 @@ const VideoCallPage: NextPage = () => {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: audioRequested, video: videoRequested });
         localStreamRef.current = stream;
         
-        // Apply initial mute/video off state to the stream
-        if (type === 'audio' || isVideoOff) { // if audio session OR user wants video off
+        if (type === 'audio' || isVideoOff) { 
             stream.getVideoTracks().forEach(track => track.enabled = false);
         }
         if (isMuted) {
@@ -193,7 +189,7 @@ const VideoCallPage: NextPage = () => {
         if (localVideoRef.current && stream.getVideoTracks().length > 0 && stream.getVideoTracks().some(t => t.enabled)) {
           localVideoRef.current.srcObject = stream;
         } else if (localVideoRef.current) {
-          localVideoRef.current.srcObject = null; // Explicitly null if no active video track
+          localVideoRef.current.srcObject = null; 
         }
         setMediaPermissionsStatus('granted');
         setCallStatus('permission_granted');
@@ -202,23 +198,21 @@ const VideoCallPage: NextPage = () => {
         setMediaPermissionsStatus('denied');
         const permDeniedMessage = type === 'audio' ? 'Microphone access is required or was denied.' : 'Camera and/or microphone access is required or was denied.';
         toast({ variant: 'destructive', title: 'Permissions Denied', description: permDeniedMessage });
-        setCallStatus('error'); // Or a specific permissions_denied status
+        setCallStatus('error'); 
       }
     };
     
     getPermissions();
 
-    // No return cleanup here; stream is cleaned up in hangUp or unmount
   }, [callStatus, callRole, sessionData, toast, isMuted, isVideoOff]);
 
-  // 3. WebRTC Setup, Signaling, and Connection Management
   useEffect(() => {
     if (!currentUser || !sessionId || callRole === 'unknown' || callStatus !== 'permission_granted' || !sessionData) {
       return;
     }
 
     if (sessionData.sessionType === 'chat') {
-      setCallStatus('connected'); // Chat is "connected" once permissions are "not_needed" / "granted"
+      setCallStatus('connected'); 
       if (sessionData.status !== 'active') {
         updateDoc(doc(db, 'videoSessions', sessionId), { status: 'active', startedAt: serverTimestamp() });
       }
@@ -238,15 +232,13 @@ const VideoCallPage: NextPage = () => {
     pc.ontrack = event => {
       if (remoteVideoRef.current && event.streams && event.streams[0]) {
         remoteVideoRef.current.srcObject = event.streams[0];
-        // Check if the track is a video track and if it's enabled
         const videoTrack = event.streams[0].getVideoTracks()[0];
         if (videoTrack) {
           setRemoteVideoActuallyOff(!videoTrack.enabled);
-          // Listen for changes in the enabled state of the remote video track
           videoTrack.onmute = () => setRemoteVideoActuallyOff(true);
           videoTrack.onunmute = () => setRemoteVideoActuallyOff(false);
         } else {
-           setRemoteVideoActuallyOff(true); // No video track
+           setRemoteVideoActuallyOff(true); 
         }
       }
     };
@@ -264,7 +256,6 @@ const VideoCallPage: NextPage = () => {
         case 'failed':
         case 'closed':
           setCallStatus('disconnected');
-          // Optionally trigger hangUp or notify user
           break;
         case 'connecting':
           setCallStatus('connecting');
@@ -317,7 +308,7 @@ const VideoCallPage: NextPage = () => {
 
         } else if (callRole === 'callee') { 
           const handleOffer = async (offerData: any) => {
-            if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') return; // Avoid race conditions
+            if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') return; 
             await pc.setRemoteDescription(new RTCSessionDescription(offerData));
             const answerDescription = await pc.createAnswer();
             await pc.setLocalDescription(answerDescription);
@@ -363,7 +354,6 @@ const VideoCallPage: NextPage = () => {
   }, [currentUser, sessionId, callRole, callStatus, sessionData, toast, mediaPermissionsStatus]);
 
 
-  // 4. Chat functionality
   useEffect(() => {
     if (!sessionId) return;
     const messagesCollectionRef = collection(db, 'webrtcRooms', sessionId, 'messages');
@@ -399,7 +389,6 @@ const VideoCallPage: NextPage = () => {
     }
   };
   
-  // 5. Session Timer
   useEffect(() => {
     if (callStatus === 'connected' && sessionData?.startedAt) {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); 
@@ -409,7 +398,7 @@ const VideoCallPage: NextPage = () => {
         const elapsed = now.seconds - (sessionData.startedAt?.seconds || now.seconds);
         setSessionTimer(elapsed > 0 ? elapsed : 0);
       };
-      updateTimer(); // Initial set
+      updateTimer(); 
       timerIntervalRef.current = setInterval(updateTimer, 1000);
     } else {
       if (timerIntervalRef.current) {
@@ -417,7 +406,6 @@ const VideoCallPage: NextPage = () => {
         timerIntervalRef.current = null;
       }
       if (callStatus !== 'connected' && callStatus !== 'connecting') {
-        // If not connected or connecting, timer should be 0 unless it's from a previous ended session
         if (sessionData?.status !== 'ended') setSessionTimer(0);
       }
     }
@@ -485,13 +473,25 @@ const VideoCallPage: NextPage = () => {
   }, [sessionId, currentUser, callRole, router, toast, callStatus, isMediaSession]);
 
   useEffect(() => {
+    // This effect should run when the component unmounts or callStatus changes to a terminal state
+    const cleanupFunction = () => {
+        if (callStatus !== 'ended' && callStatus !== 'error' && callStatus !== 'idle' && callStatus !== 'loading_session') {
+            // Avoid calling hangUp if it's already in a process of ending or hasn't started meaningfully
+            if (peerConnectionRef.current || localStreamRef.current) {
+                 handleHangUp();
+            }
+        }
+    };
+
+    // Add listener for page unload events
+    window.addEventListener('beforeunload', cleanupFunction);
+    
     return () => {
-      if (callStatus !== 'ended' && callStatus !== 'error' && callStatus !== 'idle' && callStatus !== 'loading_session') {
-        handleHangUp();
-      }
+        cleanupFunction(); // Call on unmount or when dependencies change leading to re-evaluation
+        window.removeEventListener('beforeunload', cleanupFunction);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callStatus]); 
+  }, [callStatus, handleHangUp]); // handleHangUp is memoized, so this should be safe
 
 
   const toggleMute = () => {
@@ -529,9 +529,9 @@ const VideoCallPage: NextPage = () => {
     let loadingMessage = 'Loading session...';
     if (callStatus === 'waiting_permission') loadingMessage = 'Preparing session...';
     return (
-      <div className="container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
-        <Loader2 className="h-16 w-16 animate-spin text-[hsl(var(--primary))]" />
-        <p className="mt-4 text-lg font-playfair-display text-foreground/80">
+      <div className="container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,10rem)-var(--footer-height,10rem))]">
+        <Loader2 className="h-12 w-12 sm:h-16 sm:w-16 animate-spin text-[hsl(var(--primary))]" />
+        <p className="mt-4 text-base sm:text-lg font-playfair-display text-foreground/80">
           {loadingMessage}
         </p>
       </div>
@@ -548,39 +548,39 @@ const VideoCallPage: NextPage = () => {
       }
 
      return (
-      <div className="container mx-auto px-4 py-12 flex flex-col items-center">
+      <div className="container mx-auto px-4 py-8 sm:py-12 flex flex-col items-center">
         <PageTitle>
             {determinedSessionType === 'chat' ? 'Chat Session Issue' : 
              determinedSessionType === 'audio' ? 'Audio Session Issue' : 'Video Session Issue'}
         </PageTitle>
-        <Alert variant="destructive" className="max-w-md mt-6">
+        <Alert variant="destructive" className="max-w-md mt-4 sm:mt-6">
           <AlertTriangle className="h-5 w-5" />
           <AlertTitle>{title}</AlertTitle>
           <AlertDescription>{description}</AlertDescription>
         </Alert>
-        <Button onClick={() => router.push('/')} className="mt-8 bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)]">Go to Homepage</Button>
+        <Button onClick={() => router.push('/')} className="mt-6 sm:mt-8 bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)]">Go to Homepage</Button>
       </div>
     );
   }
   
   const SessionInfoBar = () => (
-    <div className="mb-6 p-4 bg-[hsl(var(--card)/0.7)] rounded-lg border border-[hsl(var(--border)/0.5)] shadow-md text-center">
-      <p className="font-alex-brush text-3xl text-[hsl(var(--soulseer-header-pink))]">
+    <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-[hsl(var(--card)/0.7)] rounded-lg border border-[hsl(var(--border)/0.5)] shadow-md text-center">
+      <p className="font-alex-brush text-2xl sm:text-3xl text-[hsl(var(--soulseer-header-pink))]">
         {determinedSessionType.charAt(0).toUpperCase() + determinedSessionType.slice(1)} Session with {opponent?.name || 'Participant'}
       </p>
       {callStatus === 'connected' && (
-        <p className="font-playfair-display text-2xl text-[hsl(var(--accent))] mt-2">
+        <p className="font-playfair-display text-xl sm:text-2xl text-[hsl(var(--accent))] mt-1 sm:mt-2">
           Session Time: {formatTime(sessionTimer)}
         </p>
       )}
       {callStatus === 'connecting' && isMediaSession && (
-        <p className="font-playfair-display text-lg text-foreground/80 mt-2 animate-pulse">
+        <p className="font-playfair-display text-base sm:text-lg text-foreground/80 mt-1 sm:mt-2 animate-pulse">
           Attempting to connect...
         </p>
       )}
        {callStatus === 'disconnected' && (
-        <p className="font-playfair-display text-lg text-destructive mt-2">
-          Connection lost. Attempting to reconnect or session may end.
+        <p className="font-playfair-display text-base sm:text-lg text-destructive mt-1 sm:mt-2">
+          Connection lost. Attempting to reconnect...
         </p>
       )}
     </div>
@@ -600,25 +600,25 @@ const VideoCallPage: NextPage = () => {
     const currentName = isLocal ? (currentUser?.name || 'You') : (name || 'Participant');
 
     return (
-      <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)] shadow-xl relative overflow-hidden">
-        <CardHeader>
-          <CardTitle className="text-xl font-alex-brush text-[hsl(var(--soulseer-header-pink))]">
+      <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)] shadow-xl relative overflow-hidden w-full">
+        <CardHeader className="py-2 px-3 sm:py-3 sm:px-4">
+          <CardTitle className="text-base sm:text-lg font-alex-brush text-[hsl(var(--soulseer-header-pink))]">
             {userType} ({currentName}) {isAudioOnlySession && determinedSessionType !== 'chat' && "(Audio Only)"}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-2 sm:p-3">
           <div className="aspect-video bg-black rounded-md overflow-hidden flex items-center justify-center relative">
             {determinedSessionType === 'video' && <video ref={videoRef} className={`w-full h-full object-cover ${showVideo ? 'block' : 'hidden'}`} autoPlay playsInline muted={isLocal} />}
             {showAvatar && (
-              <Avatar className="w-32 h-32 text-6xl">
+              <Avatar className="w-20 h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 text-4xl sm:text-5xl md:text-6xl">
                 <AvatarImage src={photoURL || undefined} alt={currentName || 'User'} />
                 <AvatarFallback className="bg-muted text-muted-foreground">{getInitials(currentName)}</AvatarFallback>
               </Avatar>
             )}
              {(!isLocal && callStatus === 'connecting' && isMediaSession && !peerConnectionRef.current?.currentRemoteDescription) && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
-                    <Loader2 className="h-12 w-12 animate-spin text-[hsl(var(--primary))]"/>
-                    <p className="mt-3 text-white font-playfair-display">Connecting to {opponent?.name || 'participant'}...</p>
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 p-2">
+                    <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 animate-spin text-[hsl(var(--primary))]"/>
+                    <p className="mt-2 sm:mt-3 text-white font-playfair-display text-xs sm:text-sm text-center">Connecting to {opponent?.name || 'participant'}...</p>
                 </div>
             )}
           </div>
@@ -629,12 +629,12 @@ const VideoCallPage: NextPage = () => {
   
 
   return (
-    <div className="container mx-auto px-4 md:px-6 py-8 md:py-12">
+    <div className="container mx-auto px-2 sm:px-4 md:px-6 py-4 sm:py-8 md:py-12">
       <SessionInfoBar />
       
-      <div className={`grid grid-cols-1 ${isMediaSession ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-6 items-start`}>
+      <div className={`grid grid-cols-1 ${isMediaSession ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-4 sm:gap-6 items-start`}>
         {isMediaSession && (
-            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <VideoFeedCard 
                     userType="Your View" 
                     videoRef={localVideoRef} 
@@ -656,60 +656,63 @@ const VideoCallPage: NextPage = () => {
             </div>
         )}
 
-        <Card className={`lg:col-span-${isMediaSession ? '1' : '3'} bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)] shadow-xl flex flex-col ${determinedSessionType === 'chat' ? 'min-h-[70vh]' : 'max-h-[calc(2*var(--video-card-height,350px)+1.5rem)]'}`}>
-          <CardHeader>
-            <CardTitle className="text-xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] flex items-center"><MessageSquare className="mr-2 h-5 w-5"/> Session Chat</CardTitle>
+        <Card className={`lg:col-span-${isMediaSession ? '1' : '3'} bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)] shadow-xl flex flex-col ${determinedSessionType === 'chat' ? 'h-[60vh] sm:h-[70vh]' : 'max-h-[calc(2*var(--video-card-height,300px)+1.5rem)] sm:max-h-[calc(2*var(--video-card-height,350px)+1.5rem)]'} w-full`}>
+          <CardHeader className="py-2 px-3 sm:py-3 sm:px-4">
+            <CardTitle className="text-base sm:text-lg md:text-xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] flex items-center"><MessageSquare className="mr-2 h-4 w-4 sm:h-5 sm:w-5"/> Session Chat</CardTitle>
           </CardHeader>
           <CardContent className="flex-grow overflow-hidden p-0">
-            <ScrollArea className={`${determinedSessionType === 'chat' ? 'h-[calc(70vh-160px)]' : 'h-[calc(100%-70px)] sm:h-[calc(100%-70px)] md:h-[calc(100%-70px)] lg:h-[300px]'} p-4`}>
+            <ScrollArea className={`${determinedSessionType === 'chat' ? 'h-[calc(60vh-120px)] sm:h-[calc(70vh-140px)]' : 'h-[200px] sm:h-[250px] md:h-[300px] lg:h-[calc(100%-70px)]'} p-2 sm:p-3 md:p-4`}>
               {chatMessages.map((msg) => (
-                <div key={msg.id} className={`mb-3 p-3 rounded-lg max-w-[85%] shadow-sm ${msg.senderUid === currentUser?.uid ? 'ml-auto bg-[hsl(var(--primary)/0.3)] text-right' : 'mr-auto bg-[hsl(var(--muted))] text-left'}`}>
+                <div key={msg.id} className={`mb-2 sm:mb-3 p-2 sm:p-3 rounded-lg max-w-[85%] shadow-sm ${msg.senderUid === currentUser?.uid ? 'ml-auto bg-[hsl(var(--primary)/0.3)] text-right' : 'mr-auto bg-[hsl(var(--muted))] text-left'}`}>
                   <p className="text-xs text-muted-foreground font-semibold">{msg.senderName} <span className="text-xs opacity-70 ml-1">{msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span></p>
                   <p className="text-sm font-playfair-display text-foreground/90 break-words whitespace-pre-wrap">{msg.text}</p>
                 </div>
               ))}
                {chatMessages.length === 0 && (
-                <p className="text-center text-muted-foreground font-playfair-display py-4">No messages yet. Start chatting!</p>
+                <div className="text-center text-muted-foreground font-playfair-display py-4 flex flex-col items-center justify-center h-full">
+                  <Users className="h-10 w-10 sm:h-12 sm:w-12 mb-2 sm:mb-3 text-muted-foreground/50" />
+                  No messages yet.
+                </div>
               )}
             </ScrollArea>
           </CardContent>
-          <form onSubmit={handleSendMessage} className="p-4 border-t border-[hsl(var(--border)/0.5)] flex gap-2 items-center">
+          <form onSubmit={handleSendMessage} className="p-2 sm:p-3 md:p-4 border-t border-[hsl(var(--border)/0.5)] flex gap-2 items-center">
             <Input 
               type="text" 
               placeholder="Type your message..." 
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              className="bg-input text-foreground flex-grow h-10"
+              className="bg-input text-foreground flex-grow h-9 sm:h-10 text-sm"
               disabled={callStatus !== 'connected'}
             />
-            <Button type="submit" size="icon" className="bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] h-10 w-10" disabled={callStatus !== 'connected' || !chatInput.trim()}>
-              <Send className="h-5 w-5"/>
+            <Button type="submit" size="icon" className="bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0" disabled={callStatus !== 'connected' || !chatInput.trim()}>
+              <Send className="h-4 w-4 sm:h-5 sm:w-5"/>
             </Button>
           </form>
         </Card>
       </div>
 
-      <div className="mt-8 flex flex-wrap justify-center items-center gap-2 sm:gap-4">
+      <div className="mt-6 sm:mt-8 flex flex-wrap justify-center items-center gap-2 sm:gap-3 md:gap-4">
         { isMediaSession && (
-            <Button onClick={toggleMute} variant="outline" size="lg" className="border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)]" disabled={(callStatus !== 'connected' && callStatus !== 'connecting') || !localStreamRef.current?.getAudioTracks().length}>
-            {isMuted ? <MicOff /> : <Mic />} <span className="ml-1 sm:ml-2 font-playfair-display hidden sm:inline">{isMuted ? 'Unmute' : 'Mute'}</span>
+            <Button onClick={toggleMute} variant="outline" size="default" className="border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] px-3 py-2 sm:px-4" disabled={(callStatus !== 'connected' && callStatus !== 'connecting') || !localStreamRef.current?.getAudioTracks().length}>
+            {isMuted ? <MicOff className="h-5 w-5 sm:h-6 w-6" /> : <Mic className="h-5 w-5 sm:h-6 w-6" />} <span className="ml-1 sm:ml-2 font-playfair-display text-xs sm:text-sm hidden sm:inline">{isMuted ? 'Unmute' : 'Mute'}</span>
             </Button>
         )}
         { determinedSessionType === 'video' && ( 
-            <Button onClick={toggleVideo} variant="outline" size="lg" className="border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)]" disabled={(callStatus !== 'connected' && callStatus !== 'connecting') || !localStreamRef.current?.getVideoTracks().length}>
-            {isVideoOff ? <VideoOff /> : <Video />} <span className="ml-1 sm:ml-2 font-playfair-display hidden sm:inline">{isVideoOff ? 'Start Video' : 'Stop Video'}</span>
+            <Button onClick={toggleVideo} variant="outline" size="default" className="border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] px-3 py-2 sm:px-4" disabled={(callStatus !== 'connected' && callStatus !== 'connecting') || !localStreamRef.current?.getVideoTracks().length}>
+            {isVideoOff ? <VideoOff className="h-5 w-5 sm:h-6 w-6" /> : <Video className="h-5 w-5 sm:h-6 w-6" />} <span className="ml-1 sm:ml-2 font-playfair-display text-xs sm:text-sm hidden sm:inline">{isVideoOff ? 'Video On' : 'Video Off'}</span>
             </Button>
         )}
-        <Button onClick={handleHangUp} variant="destructive" size="lg" disabled={callStatus === 'ended' || callStatus === 'idle' || callStatus === 'error' || callStatus === 'loading_session'}>
-          <PhoneOff /> <span className="ml-1 sm:ml-2 font-playfair-display">End Session</span>
+        <Button onClick={handleHangUp} variant="destructive" size="default" className="px-3 py-2 sm:px-4" disabled={callStatus === 'ended' || callStatus === 'idle' || callStatus === 'error' || callStatus === 'loading_session'}>
+          <PhoneOff className="h-5 w-5 sm:h-6 w-6" /> <span className="ml-1 sm:ml-2 font-playfair-display text-xs sm:text-sm">End Session</span>
         </Button>
       </div>
 
       {callStatus === 'ended' && (
-        <Alert className="mt-8 max-w-md mx-auto bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)]">
+        <Alert className="mt-6 sm:mt-8 max-w-md mx-auto bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)]">
             <CheckCircle className="h-5 w-5 text-green-500"/>
-            <AlertTitle className="font-alex-brush text-[hsl(var(--soulseer-header-pink))]">Session Ended</AlertTitle>
-            <AlertDescription className="font-playfair-display text-foreground/80">The session has concluded. Total time: {formatTime(sessionTimer)}.</AlertDescription>
+            <AlertTitle className="font-alex-brush text-lg sm:text-xl text-[hsl(var(--soulseer-header-pink))]">Session Ended</AlertTitle>
+            <AlertDescription className="font-playfair-display text-sm sm:text-base text-foreground/80">The session has concluded. Total time: {formatTime(sessionTimer)}.</AlertDescription>
         </Alert>
       )}
     </div>
@@ -717,4 +720,3 @@ const VideoCallPage: NextPage = () => {
 };
 
 export default VideoCallPage;
-
