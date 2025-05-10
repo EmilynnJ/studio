@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import type { AppUser } from '@/types/user';
 import type { VideoSessionData } from '@/types/session';
 import { Edit3, Eye, MessageSquare, Users, DollarSign, CalendarClock, BarChart3, Settings, Bell, LogOut, ShieldCheck, Star, CheckCircle, AlertCircle, Clock, History, Video, Mic, MessageCircle } from 'lucide-react';
@@ -21,13 +21,6 @@ import Image from 'next/image';
 import { formatDistanceToNowStrict } from 'date-fns';
 
 
-const readerStats = {
-  totalEarnings: 2350.75,
-  completedSessions: 42,
-  averageRating: 4.8,
-  profileViews: 1204,
-};
-
 export default function DashboardPage() {
   const { currentUser, loading, logout, updateUserStatus } = useAuth();
   const router = useRouter();
@@ -37,6 +30,31 @@ export default function DashboardPage() {
   const [pendingSessions, setPendingSessions] = useState<VideoSessionData[]>([]);
   const [sessionHistory, setSessionHistory] = useState<VideoSessionData[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]); // Using any for now, define specific type later
+
+
+  const readerStats = useMemo(() => {
+    if (currentUser?.role !== 'reader' || sessionHistory.length === 0) {
+      return {
+        totalEarnings: 0,
+        completedSessions: 0,
+        averageRating: 0, // Placeholder, rating system not fully implemented
+        profileViews: 0, // Placeholder
+      };
+    }
+
+    const completedReaderSessions = sessionHistory.filter(
+      session => session.readerUid === currentUser.uid && (session.status === 'ended' || session.status === 'ended_insufficient_funds')
+    );
+
+    const totalEarnings = completedReaderSessions.reduce((acc, session) => acc + (session.amountCharged || 0), 0);
+    
+    return {
+      totalEarnings: totalEarnings,
+      completedSessions: completedReaderSessions.length,
+      averageRating: 4.8, // Placeholder
+      profileViews: 1204, // Placeholder
+    };
+  }, [sessionHistory, currentUser]);
 
 
   useEffect(() => {
@@ -65,7 +83,7 @@ export default function DashboardPage() {
         // Populate recent activity based on history (simplified example)
         const newRecentActivity = history.slice(0, 3).map(session => ({
             id: session.sessionId,
-            type: `Session ${session.status}`,
+            type: `Session ${session.status.replace('_', ' ')}`,
             description: `With ${currentUser.uid === session.clientUid ? session.readerName : session.clientName}`,
             time: session.endedAt ? formatDistanceToNowStrict(session.endedAt.toDate()) + ' ago' : formatDistanceToNowStrict(session.requestedAt.toDate()) + ' ago',
             icon: session.status === 'active' ? <Clock className="h-5 w-5 text-yellow-400"/> : (session.status === 'ended' || session.status === 'ended_insufficient_funds') ? <CheckCircle className="h-5 w-5 text-green-400"/> : <History className="h-5 w-5 text-purple-400"/>

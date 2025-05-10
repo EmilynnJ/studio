@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import { PageTitle } from '@/components/ui/page-title';
 import { Button } from '@/components/ui/button';
@@ -77,3 +78,4 @@ export default function CommunityPage() {
     </div>
   );
 }
+

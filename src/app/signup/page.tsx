@@ -1,3 +1,4 @@
+
 'use client'; // Made component a client component
 
 import Link from 'next/link';
@@ -41,7 +42,7 @@ export default function SignupPage() {
       <Card className="w-full max-w-md bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)] shadow-2xl">
         <CardHeader className="text-center">
            <div className="flex justify-center mb-4">
-            <CelestialIcon className="h-16 w-16 text-[hsl(var(--soulseer-pink))]" />
+            <CelestialIcon className="h-16 w-16 text-[hsl(var(--soulseer-header-pink))]" />
           </div>
           <CardTitle className="text-4xl font-alex-brush text-[hsl(var(--soulseer-header-pink))]">Join SoulSeer</CardTitle>
           <CardDescription className="font-playfair-display text-muted-foreground">
@@ -124,3 +125,4 @@ export default function SignupPage() {
     </div>
   );
 }
+

@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,7 @@ export default function HomePage() {
     <div className="flex flex-col items-center text-foreground">
       {/* Hero Section */}
       <section className="w-full py-12 md:py-20 relative text-center">
-        <h1 className="text-5xl sm:text-6xl md:text-7xl font-alex-brush text-[hsl(var(--soulseer-logo-pink))] drop-shadow-lg mb-4 sm:mb-6">
+        <h1 className="text-5xl sm:text-6xl md:text-7xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] drop-shadow-lg mb-4 sm:mb-6">
           SoulSeer
         </h1>
         <div className="flex justify-center mb-4 sm:mb-6">
@@ -111,7 +112,7 @@ export default function HomePage() {
       {featuredReaders.filter(r => r.status === 'online').length > 0 && (
         <section className="w-full py-12 md:py-16 bg-[hsl(var(--background)/0.5)]">
           <div className="container mx-auto px-4 md:px-6">
-            <h2 className="soulseer-section-title text-center md:text-left">Online Readers</h2>
+            <h2 className="soulseer-section-title text-center md:text-left text-[hsl(var(--soulseer-header-pink))]">Online Readers</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
               {featuredReaders.filter(r => r.status === 'online').slice(0,3).map((reader) => (
                 <ReaderCard key={reader.id} reader={reader} />
@@ -129,7 +130,7 @@ export default function HomePage() {
       {/* Featured Products Section */}
       <section className="w-full py-12 md:py-16">
         <div className="container mx-auto px-4 md:px-6">
-          <h2 className="soulseer-section-title">Featured Products</h2>
+          <h2 className="soulseer-section-title text-[hsl(var(--soulseer-header-pink))]">Featured Products</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
             {featuredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
@@ -173,3 +174,4 @@ export default function HomePage() {
     </div>
   );
 }
+

@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import { Instagram, Facebook, Youtube, Twitter, Send } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
@@ -14,7 +15,7 @@ export function Footer() {
         <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4 mb-8 md:mb-10">
           {/* Column 1: SoulSeer Info */}
           <div>
-            <h3 className="mb-3 text-2xl font-alex-brush text-[hsl(var(--soulseer-logo-pink))]">SoulSeer</h3>
+            <h3 className="mb-3 text-2xl font-alex-brush text-[hsl(var(--soulseer-header-pink))]">SoulSeer</h3>
             <p className="text-xs sm:text-sm font-playfair-display leading-relaxed text-foreground/70">
               Connecting souls through ethereal guidance and authentic psychic readings. Discover your path with us.
             </p>
@@ -89,3 +90,4 @@ export function Footer() {
     </footer>
   );
 }
+

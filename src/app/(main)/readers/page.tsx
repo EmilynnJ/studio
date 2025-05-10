@@ -1,3 +1,4 @@
+
 'use client'; // Readers page needs to be client component to fetch data and use hooks
 
 import React, { useEffect, useState } from 'react';
@@ -158,3 +159,4 @@ interface TempAppUser extends AppUser {
   rating?: number;
   shortBio?: string;
 }
+

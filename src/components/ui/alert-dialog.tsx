@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -79,7 +80,11 @@ const AlertDialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold", className)}
+    className={cn("text-lg font-semibold", 
+    // Apply Alex Brush and pink color if it's intended to be a main header style
+    // For SoulSeer, AlertDialogTitle typically uses Playfair Display unless specified
+    // If it needs Alex Brush & pink: "font-alex-brush text-[hsl(var(--soulseer-header-pink))]",
+    className)}
     {...props}
   />
 ))
@@ -139,3 +144,4 @@ export {
   AlertDialogAction,
   AlertDialogCancel,
 }
+

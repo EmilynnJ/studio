@@ -98,7 +98,7 @@ export function SessionStatusDisplay({
      return (
         <Alert variant="destructive" className="max-w-md mt-4 sm:mt-6 mx-auto">
           <AlertTriangle className="h-5 w-5" />
-          <AlertTitle>{permTitle}</AlertTitle>
+          <AlertTitle className="font-alex-brush text-[hsl(var(--soulseer-header-pink))]">{permTitle}</AlertTitle>
           <AlertDescription>{permDescription}</AlertDescription>
           <Button onClick={() => router.push('/dashboard')} className="mt-4 w-full">Go to Dashboard</Button>
         </Alert>
@@ -109,7 +109,7 @@ export function SessionStatusDisplay({
      return (
         <Alert variant="destructive" className="max-w-md mt-4 sm:mt-6 mx-auto">
           <AlertTriangle className="h-5 w-5" />
-          <AlertTitle>Session Error</AlertTitle>
+          <AlertTitle className="font-alex-brush text-[hsl(var(--soulseer-header-pink))]">Session Error</AlertTitle>
           <AlertDescription>There was an issue with the session. Please try again or contact support.</AlertDescription>
           <Button onClick={() => router.push('/dashboard')} className="mt-4 w-full">Go to Dashboard</Button>
         </Alert>

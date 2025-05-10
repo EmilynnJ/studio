@@ -1,3 +1,4 @@
+
 import { PageTitle } from '@/components/ui/page-title';
 import { ProductCard, type Product } from '@/components/shop/product-card';
 import { Input } from '@/components/ui/input';
@@ -55,3 +56,4 @@ export default function ShopPage() {
     </div>
   );
 }
+

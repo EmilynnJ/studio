@@ -26,7 +26,7 @@ export default function AboutPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[hsl(var(--background)/0.7)] to-transparent"></div>
         <div className="absolute bottom-8 left-8">
-          <h2 className="text-3xl md:text-4xl font-alex-brush text-white drop-shadow-md">Connect. Explore. Evolve.</h2>
+          <h2 className="text-3xl md:text-4xl font-alex-brush text-white drop-shadow-md" style={{ color: 'white', textShadow: '0 0 3px hsl(var(--foreground) / 0.7), 0 0 6px hsl(var(--foreground) / 0.5),0 0 9px hsl(var(--foreground) / 0.3)'}}>Connect. Explore. Evolve.</h2>
         </div>
       </div>
 
@@ -87,3 +87,4 @@ export default function AboutPage() {
     </div>
   );
 }
+

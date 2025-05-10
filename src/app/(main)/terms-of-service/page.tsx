@@ -1,3 +1,4 @@
+
 import { PageTitle } from '@/components/ui/page-title';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollText } from 'lucide-react';
@@ -94,3 +95,4 @@ export default function TermsOfServicePage() {
     </div>
   );
 }
+

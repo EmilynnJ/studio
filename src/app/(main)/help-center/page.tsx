@@ -1,3 +1,4 @@
+
 import { PageTitle } from '@/components/ui/page-title';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -107,3 +108,4 @@ export default function HelpCenterPage() {
     </div>
   );
 }
+

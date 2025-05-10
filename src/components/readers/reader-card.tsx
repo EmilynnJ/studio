@@ -176,7 +176,7 @@ export function ReaderCard({ reader }: ReaderCardProps) {
             className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-60 disabled:cursor-not-allowed text-xs sm:text-sm px-1 sm:px-2 py-1.5 sm:py-2 flex items-center justify-center gap-1"
             title="Request Chat Session"
           >
-            <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Chat</span>
+            <MessageSquare className="w-3 h-3 sm:w-4 sm:w-4" /> <span className="hidden sm:inline">Chat</span>
           </Button>
         </div>
       </CardFooter>
@@ -191,5 +191,6 @@ export function ReaderCard({ reader }: ReaderCardProps) {
     </Card>
   );
 }
+
 
 
