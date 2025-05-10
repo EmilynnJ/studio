@@ -1,10 +1,12 @@
-// TODO: Replace with your actual Firebase project configuration
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID" // Optional
+  apiKey: "AIzaSyC_FoWo180V79D85l2N0ZAz8gVTxOdlnM0",
+  authDomain: "soulseer-2c4ed.firebaseapp.com",
+  databaseURL: "https://soulseer-2c4ed-default-rtdb.firebaseio.com",
+  projectId: "soulseer-2c4ed",
+  storageBucket: "soulseer-2c4ed.appspot.com", // Corrected from firebasestorage.app to appspot.com
+  messagingSenderId: "81229695823",
+  appId: "1:81229695823:web:0f767ea0512c3a4f2b533a",
+  measurementId: "G-VFGKGNEY0D"
 };
