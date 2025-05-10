@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -25,9 +24,9 @@ interface SessionControlsProps {
   onToggleVideo: () => void;
   onHangUp: () => void;
   callStatus: CallStatus;
-  mediaPermissionsGranted: boolean;
-  hasAudioTrack: boolean;
-  hasVideoTrack: boolean;
+  mediaPermissionsGranted: boolean; // True if permissions granted or not needed (chat)
+  hasAudioTrack: boolean; // True if local stream has an audio track
+  hasVideoTrack: boolean; // True if local stream has a video track
 }
 
 export function SessionControls({
@@ -44,7 +43,9 @@ export function SessionControls({
 }: SessionControlsProps) {
   
   const isMediaSession = sessionType === 'video' || sessionType === 'audio';
-  const canControlMedia = (callStatus === 'connected' || callStatus === 'connecting') && mediaPermissionsGranted;
+  // Controls should be enabled if permissions are granted (or not needed for chat) AND call is in a state where media can be controlled.
+  const canControlMedia = mediaPermissionsGranted && (callStatus === 'connected' || callStatus === 'connecting' || callStatus === 'permission_granted');
+  const canHangUp = callStatus !== 'ended' && callStatus !== 'error' && callStatus !== 'idle' && callStatus !== 'loading_session';
 
   return (
     <div className="mt-6 sm:mt-8 flex flex-wrap justify-center items-center gap-2 sm:gap-3 md:gap-4">
@@ -54,7 +55,7 @@ export function SessionControls({
           variant="outline"
           size="default"
           className="border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] px-3 py-2 sm:px-4"
-          disabled={!canControlMedia || !hasAudioTrack}
+          disabled={!canControlMedia || !hasAudioTrack} // Disable if no audio track
           title={isMuted ? 'Unmute Microphone' : 'Mute Microphone'}
           aria-pressed={isMuted}
         >
@@ -70,7 +71,7 @@ export function SessionControls({
           variant="outline"
           size="default"
           className="border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] px-3 py-2 sm:px-4"
-          disabled={!canControlMedia || !hasVideoTrack}
+          disabled={!canControlMedia || !hasVideoTrack} // Disable if no video track
           title={isVideoOff ? 'Turn Camera On' : 'Turn Camera Off'}
           aria-pressed={isVideoOff}
         >
@@ -87,7 +88,7 @@ export function SessionControls({
             variant="destructive"
             size="default"
             className="px-3 py-2 sm:px-4"
-            disabled={callStatus === 'ended' || callStatus === 'error'}
+            disabled={!canHangUp}
             title="End Session"
           >
             <PhoneOff className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -112,4 +113,3 @@ export function SessionControls({
     </div>
   );
 }
-
