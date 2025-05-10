@@ -23,14 +23,14 @@ export interface VideoSessionData {
   clientUid: string;
   clientName: string;
   clientPhotoURL?: string | null;
-  status: 'pending' | 'accepted_by_reader' | 'active' | 'ended' | 'cancelled';
+  status: 'pending' | 'accepted_by_reader' | 'active' | 'ended' | 'cancelled' | 'ended_insufficient_funds'; // Added new status
   requestedAt: Timestamp;
   startedAt?: Timestamp;
   endedAt?: Timestamp;
   sessionType: SessionType;
-  totalMinutes?: number;
-  amountCharged?: number;
-  readerRatePerMinute?: number; // Added reader's rate for the session
+  totalMinutes?: number; // Total billed minutes
+  amountCharged?: number; // Total amount charged for the session
+  readerRatePerMinute?: number; // Reader's rate at the time of session booking
 }
 
 export interface ChatMessage {
@@ -43,5 +43,4 @@ export interface ChatMessage {
 }
 
 export interface OpponentInfo extends Pick<AppUser, 'name' | 'uid' | 'photoURL'> {}
-
 

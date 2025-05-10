@@ -9,5 +9,6 @@ export interface AppUser {
   createdAt?: Timestamp; // Timestamp from Firestore
   status?: 'online' | 'offline' | 'busy'; // Reader availability status
   ratePerMinute?: number; // For readers, e.g., price in USD per minute
+  balance?: number; // For clients, their available funds for sessions
 }
 

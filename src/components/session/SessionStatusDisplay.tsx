@@ -4,7 +4,7 @@
 import React from 'react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Loader2, AlertTriangle, UserCheck, Clock, DollarSign, UserCircle } from 'lucide-react'; // Added Clock, DollarSign, UserCircle
+import { CheckCircle, Loader2, AlertTriangle, Clock, DollarSign, UserCircle2, Hourglass } from 'lucide-react';
 import type { CallStatus, SessionType, VideoSessionData, OpponentInfo } from '@/types/session';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
@@ -16,6 +16,8 @@ interface SessionStatusDisplayProps {
   opponent: OpponentInfo | null;
   sessionData: VideoSessionData | null;
   mediaPermissionsStatus: 'prompt' | 'granted' | 'denied' | 'not_needed';
+  clientBalance?: number; // Added for client balance
+  currentAmountCharged?: number; // Added for amount charged so far
 }
 
 const formatTime = (totalSeconds: number): string => {
@@ -31,6 +33,8 @@ export function SessionStatusDisplay({
   opponent,
   sessionData,
   mediaPermissionsStatus,
+  clientBalance,
+  currentAmountCharged,
 }: SessionStatusDisplayProps) {
   const router = useRouter();
   const { currentUser } = useAuth();
@@ -46,7 +50,7 @@ export function SessionStatusDisplay({
     if (sessionData.status === 'pending' && currentUser.uid === sessionData.clientUid) {
       statusMessage = `Waiting for ${sessionData.readerName || 'Reader'} to accept your request...`;
       titleMessage = `Pending ${sessionType} Session`;
-    } else if ((sessionData.status === 'accepted_by_reader' || sessionData.status === 'pending' && currentUser.uid === sessionData.readerUid) && callStatus !== 'connected') {
+    } else if ((sessionData.status === 'accepted_by_reader' || (sessionData.status === 'pending' && currentUser.uid === sessionData.readerUid)) && callStatus !== 'connected') {
        statusMessage = `Connecting with ${currentUser.uid === sessionData.readerUid ? sessionData.clientName : sessionData.readerName}...`;
        titleMessage = `Preparing ${sessionType} Session`;
     }
@@ -70,6 +74,9 @@ export function SessionStatusDisplay({
         <p className="mt-4 text-base sm:text-lg font-playfair-display text-foreground/80">
           {statusMessage || 'Initializing...'}
         </p>
+         {sessionData?.status === 'pending' && currentUser?.uid === sessionData.readerUid && (
+             <p className="text-sm text-muted-foreground font-playfair-display mt-2">A client is waiting for you to accept the session.</p>
+         )}
       </div>
     );
   }
@@ -89,7 +96,7 @@ export function SessionStatusDisplay({
     );
   }
 
-  if (callStatus === 'error') {
+  if (callStatus === 'error' && sessionData?.status !== 'ended_insufficient_funds') { // Don't show generic error if specific insufficient funds error
      return (
         <Alert variant="destructive" className="max-w-md mt-4 sm:mt-6 mx-auto">
           <AlertTriangle className="h-5 w-5" />
@@ -107,30 +114,39 @@ export function SessionStatusDisplay({
         <p className="font-alex-brush text-2xl sm:text-3xl text-[hsl(var(--soulseer-header-pink))]">
           {titleMessage}
         </p>
-        {(callStatus === 'connected' || (callStatus === 'ended' && sessionData?.startedAt)) && (
-          <div className="font-playfair-display text-lg sm:text-xl mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
+        {(callStatus === 'connected' || ( (sessionData?.status === 'ended' || sessionData?.status === 'ended_insufficient_funds') && sessionData?.startedAt)) && (
+          <div className="font-playfair-display text-base sm:text-lg mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
             <p className="text-[hsl(var(--accent))]">
-              <Clock className="inline-block h-5 w-5 mr-1.5 align-text-bottom" />
+              <Clock className="inline-block h-4 w-4 sm:h-5 sm:w-5 mr-1.5 align-text-bottom" />
               Session Time: {formatTime(sessionTimer)}
             </p>
             {sessionData?.readerRatePerMinute !== undefined && (
-              <p className="text-sm text-foreground/80">
-                <DollarSign className="inline-block h-4 w-4 mr-1 align-text-bottom" />
-                Rate: ${sessionData.readerRatePerMinute.toFixed(2)}/min
+              <p className="text-sm sm:text-base text-foreground/80">
+                <DollarSign className="inline-block h-4 w-4 sm:h-5 sm:w-5 mr-1 align-text-bottom" />
+                Reader's Rate: ${sessionData.readerRatePerMinute.toFixed(2)}/min
               </p>
             )}
-            {currentUser?.role === 'client' && ( // Only show balance placeholder to client for now
-                <p className="text-sm text-foreground/80">
-                    <UserCircle className="inline-block h-4 w-4 mr-1 align-text-bottom" />
-                    Your Balance: $XX.XX <span className="text-xs">(Billing not active)</span>
-                </p>
+            {currentUser?.role === 'client' && (
+                <>
+                {typeof clientBalance === 'number' && (
+                    <p className="text-sm sm:text-base text-foreground/80">
+                        <UserCircle2 className="inline-block h-4 w-4 sm:h-5 sm:w-5 mr-1 align-text-bottom" />
+                        Your Balance: ${clientBalance.toFixed(2)}
+                    </p>
+                )}
+                {typeof currentAmountCharged === 'number' && currentAmountCharged > 0 && (
+                     <p className="text-sm sm:text-base text-foreground/70">
+                        Amount Charged: ${currentAmountCharged.toFixed(2)}
+                    </p>
+                )}
+                </>
             )}
           </div>
         )}
-        {statusMessage && (callStatus === 'connecting' || callStatus === 'disconnected' || (sessionData?.status === 'pending' || sessionData?.status === 'accepted_by_reader')  && callStatus !== 'connected') && (
+        {statusMessage && (callStatus === 'connecting' || callStatus === 'disconnected' || ((sessionData?.status === 'pending' || sessionData?.status === 'accepted_by_reader') && callStatus !== 'connected')) && (
           <div className="flex items-center justify-center gap-2 font-playfair-display text-sm sm:text-base mt-1 sm:mt-2">
             {(callStatus === 'connecting' || (sessionData?.status === 'accepted_by_reader' && callStatus !== 'connected')) && <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-foreground/80" />}
-            {sessionData?.status === 'pending' && currentUser?.uid === sessionData.clientUid && <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-foreground/80" />}
+            {sessionData?.status === 'pending' && currentUser?.uid === sessionData.clientUid && <Hourglass className="h-4 w-4 sm:h-5 sm:w-5 text-foreground/80" />}
              <p className={`${callStatus === 'disconnected' ? 'text-destructive' : 'text-foreground/80'} ${callStatus === 'connecting' ? 'animate-pulse' : ''}`}>
               {statusMessage}
             </p>
@@ -138,15 +154,18 @@ export function SessionStatusDisplay({
         )}
       </div>
 
-      {callStatus === 'ended' && sessionData?.status === 'ended' && (
-        <Alert className="mt-6 sm:mt-8 max-w-md mx-auto bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)]">
-          <CheckCircle className="h-5 w-5 text-green-500" />
-          <AlertTitle className="font-alex-brush text-lg sm:text-xl text-[hsl(var(--soulseer-header-pink))]">Session Ended</AlertTitle>
+      {(sessionData?.status === 'ended' || sessionData?.status === 'ended_insufficient_funds') && (
+        <Alert className="mt-6 sm:mt-8 max-w-md mx-auto bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)]" variant={sessionData.status === 'ended_insufficient_funds' ? 'destructive' : 'default'}>
+          {sessionData.status === 'ended_insufficient_funds' ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle className="h-5 w-5 text-green-500" />}
+          <AlertTitle className="font-alex-brush text-lg sm:text-xl text-[hsl(var(--soulseer-header-pink))]">
+            {sessionData.status === 'ended_insufficient_funds' ? 'Session Ended: Insufficient Funds' : 'Session Ended'}
+            </AlertTitle>
           <AlertDescription className="font-playfair-display text-sm sm:text-base text-foreground/80">
             The session has concluded. Total time: {formatTime(sessionData.totalMinutes ? sessionData.totalMinutes * 60 : sessionTimer)}.
-            {sessionData.readerRatePerMinute !== undefined && sessionData.totalMinutes !== undefined && (
-              <span className="block mt-1">Amount (Placeholder): ${(sessionData.readerRatePerMinute * sessionData.totalMinutes).toFixed(2)}</span>
+            {typeof sessionData.amountCharged === 'number' && (
+              <span className="block mt-1">Total Amount Charged: ${sessionData.amountCharged.toFixed(2)}</span>
             )}
+             {sessionData.status === 'ended_insufficient_funds' && <span className="block mt-1">Please top up your balance to continue using our services.</span>}
           </AlertDescription>
           <Button onClick={() => router.push('/dashboard')} className="mt-4 w-full">Back to Dashboard</Button>
         </Alert>
@@ -154,3 +173,4 @@ export function SessionStatusDisplay({
     </>
   );
 }
+
