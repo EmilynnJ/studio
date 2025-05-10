@@ -72,9 +72,8 @@ body {
   }
 
   /* Global background image for the app */
-  .app-background {
-    /* User will replace with their high-resolution image */
-    background-image: url('/images/soulseer-hero-background.jpg'); 
+  body.app-background { /* Changed to body.app-background to ensure specificity */
+    background-image: url('https://i.postimg.cc/8cjhG9Dw/background-image.png'); 
     background-size: cover;
     background-attachment: fixed;
     background-position: center;

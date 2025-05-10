@@ -25,20 +25,21 @@ export default function HomePage() {
     <div className="flex flex-col items-center text-foreground">
       {/* Hero Section - Adjusted to match image */}
       <section className="w-full py-16 md:py-24 relative text-center">
+        <h1 className="text-6xl md:text-7xl font-alex-brush text-[hsl(var(--soulseer-logo-pink))] drop-shadow-lg mb-6">
+          SoulSeer
+        </h1>
         {/* Placeholder for the central SoulSeer logo image from the design */}
         <div className="flex justify-center mb-6">
           <Image 
-            src="https://picsum.photos/seed/soulseerlogo/150/150" // Replace with actual logo URL
-            alt="SoulSeer Logo" 
-            width={150} 
-            height={150} 
-            className="rounded-full shadow-2xl border-2 border-[hsl(var(--soulseer-gold)/0.5)]"
-            data-ai-hint="spiritual logo woman"
+            src="https://i.postimg.cc/L8cmRbKD/HERO-IMAGE.jpg" 
+            alt="SoulSeer Hero Image - A mystical woman with flowing hair and celestial elements" 
+            width={250} // Adjust width as needed, maintaining aspect ratio if possible
+            height={250} // Adjust height as needed
+            className="rounded-full shadow-2xl border-2 border-[hsl(var(--soulseer-gold)/0.5)] object-cover"
+            data-ai-hint="mystical woman celestial"
+            priority // Load this image first
           />
         </div>
-        <h1 className="text-6xl md:text-7xl font-alex-brush text-[hsl(var(--soulseer-logo-pink))] drop-shadow-lg">
-          SoulSeer
-        </h1>
         <p className="mt-3 max-w-xl mx-auto text-xl soulseer-tagline">
           A Community of Gifted Psychics
         </p>
