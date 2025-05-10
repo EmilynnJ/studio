@@ -11,21 +11,15 @@ import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import type { AppUser } from '@/types/user';
 import type { VideoSessionData } from '@/types/session';
-import { Edit3, Eye, MessageSquare, Users, DollarSign, CalendarClock, BarChart3, Settings, Bell, LogOut, ShieldCheck, Star, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Edit3, Eye, MessageSquare, Users, DollarSign, CalendarClock, BarChart3, Settings, Bell, LogOut, ShieldCheck, Star, CheckCircle, AlertCircle, Clock, History, Video, Mic, MessageCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
-import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, Timestamp, getDocs, or } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
+import { formatDistanceToNowStrict } from 'date-fns';
 
-
-// Placeholder data - replace with actual data fetching
-const recentActivity = [
-  { id: 'act1', type: 'New Message', description: 'From Mysteria Moon', time: '2 hours ago', icon: <MessageSquare className="h-5 w-5 text-blue-400"/> },
-  { id: 'act2', type: 'Session Reminder', description: 'Upcoming session with Orion Stargazer in 1 day', time: 'Yesterday', icon: <CalendarClock className="h-5 w-5 text-purple-400"/> },
-  { id: 'act3', type: 'New Follower', description: 'Lyra B. started following you (Reader View)', time: '3 days ago', icon: <Users className="h-5 w-5 text-green-400"/> },
-];
 
 const readerStats = {
   totalEarnings: 2350.75,
@@ -41,35 +35,75 @@ export default function DashboardPage() {
   const [userRole, setUserRole] = useState<'client' | 'reader' | null>(null);
   const [readerAvailability, setReaderAvailability] = useState<'online' | 'offline' | 'busy' | undefined>(currentUser?.status);
   const [pendingSessions, setPendingSessions] = useState<VideoSessionData[]>([]);
+  const [sessionHistory, setSessionHistory] = useState<VideoSessionData[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]); // Using any for now, define specific type later
+
 
   useEffect(() => {
     if (!loading && !currentUser) {
       router.push('/login');
     } else if (currentUser) {
       setUserRole(currentUser.role);
-      if(currentUser.role === 'reader') {
+
+      // Fetch session history
+      const sessionsQuery = query(
+        collection(db, 'videoSessions'),
+        or(
+          where('clientUid', '==', currentUser.uid),
+          where('readerUid', '==', currentUser.uid)
+        ),
+        orderBy('requestedAt', 'desc')
+      );
+
+      const unsubscribeHistory = onSnapshot(sessionsQuery, (querySnapshot) => {
+        const history: VideoSessionData[] = [];
+        querySnapshot.forEach((doc) => {
+          history.push({ ...doc.data(), sessionId: doc.id } as VideoSessionData);
+        });
+        setSessionHistory(history);
+        
+        // Populate recent activity based on history (simplified example)
+        const newRecentActivity = history.slice(0, 3).map(session => ({
+            id: session.sessionId,
+            type: `Session ${session.status}`,
+            description: `With ${currentUser.uid === session.clientUid ? session.readerName : session.clientName}`,
+            time: session.endedAt ? formatDistanceToNowStrict(session.endedAt.toDate()) + ' ago' : formatDistanceToNowStrict(session.requestedAt.toDate()) + ' ago',
+            icon: session.status === 'active' ? <Clock className="h-5 w-5 text-yellow-400"/> : (session.status === 'ended' || session.status === 'ended_insufficient_funds') ? <CheckCircle className="h-5 w-5 text-green-400"/> : <History className="h-5 w-5 text-purple-400"/>
+        }));
+        setRecentActivity(newRecentActivity);
+
+      }, (error) => {
+        console.error("Error fetching session history: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch session history." });
+      });
+
+
+      if (currentUser.role === 'reader') {
         setReaderAvailability(currentUser.status);
 
-        // Fetch pending sessions for reader
-        const sessionsColRef = collection(db, 'videoSessions');
-        const q = query(sessionsColRef, 
-          where('readerUid', '==', currentUser.uid), 
+        const pendingSessionsQuery = query(
+          collection(db, 'videoSessions'),
+          where('readerUid', '==', currentUser.uid),
           where('status', '==', 'pending'),
           orderBy('requestedAt', 'desc')
         );
 
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const unsubscribePending = onSnapshot(pendingSessionsQuery, (querySnapshot) => {
           const sessions: VideoSessionData[] = [];
           querySnapshot.forEach((doc) => {
-            sessions.push(doc.data() as VideoSessionData);
+            sessions.push({ ...doc.data(), sessionId: doc.id } as VideoSessionData);
           });
           setPendingSessions(sessions);
         }, (error) => {
           console.error("Error fetching pending sessions: ", error);
           toast({ variant: "destructive", title: "Error", description: "Could not fetch pending sessions." });
         });
-        return () => unsubscribe();
+        return () => { 
+            unsubscribeHistory();
+            unsubscribePending();
+        };
       }
+      return () => unsubscribeHistory();
     }
   }, [currentUser, loading, router, toast]);
 
@@ -77,6 +111,7 @@ export default function DashboardPage() {
     if (currentUser && currentUser.role === 'reader') {
       await updateUserStatus(currentUser.uid, newStatus);
       setReaderAvailability(newStatus);
+      toast({ title: 'Availability Updated', description: `You are now ${newStatus}.`})
     }
   };
 
@@ -98,7 +133,11 @@ export default function DashboardPage() {
     return (
       <div className="container mx-auto px-4 md:px-6 py-12 md:py-20">
         <PageTitle>Dashboard</PageTitle>
-        <Skeleton className="h-96 w-full" />
+        <Skeleton className="h-24 w-full mb-4" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <Skeleton className="lg:col-span-1 h-96" />
+          <Skeleton className="lg:col-span-2 h-96" />
+        </div>
       </div>
     );
   }
@@ -107,6 +146,15 @@ export default function DashboardPage() {
     if (!name) return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   }
+  
+  const getSessionTypeIcon = (type: VideoSessionData['sessionType']) => {
+    switch(type) {
+      case 'video': return <Video className="h-5 w-5 text-muted-foreground" />;
+      case 'audio': return <Mic className="h-5 w-5 text-muted-foreground" />;
+      case 'chat': return <MessageCircle className="h-5 w-5 text-muted-foreground" />;
+      default: return <History className="h-5 w-5 text-muted-foreground" />;
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 md:px-6 py-12 md:py-20">
@@ -135,9 +183,9 @@ export default function DashboardPage() {
               <CardFooter className="flex flex-col gap-2 p-4 border-t border-[hsl(var(--border)/0.5)]">
                  <p className="text-sm font-playfair-display text-muted-foreground mb-1">Set Your Availability:</p>
                 <div className="grid grid-cols-3 gap-2 w-full">
-                  <Button onClick={() => handleAvailabilityChange('online')} variant={readerAvailability === 'online' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'online' ? 'bg-green-500 hover:bg-green-600 text-primary-foreground' : ''}>Online</Button>
-                  <Button onClick={() => handleAvailabilityChange('busy')} variant={readerAvailability === 'busy' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'busy' ? 'bg-yellow-500 hover:bg-yellow-600 text-background' : ''}>Busy</Button>
-                  <Button onClick={() => handleAvailabilityChange('offline')} variant={readerAvailability === 'offline' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'offline' ? 'bg-slate-500 hover:bg-slate-600 text-primary-foreground' : ''}>Offline</Button>
+                  <Button onClick={() => handleAvailabilityChange('online')} variant={readerAvailability === 'online' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'online' ? 'bg-green-500 hover:bg-green-600 text-primary-foreground' : 'border-[hsl(var(--border))]'}>Online</Button>
+                  <Button onClick={() => handleAvailabilityChange('busy')} variant={readerAvailability === 'busy' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'busy' ? 'bg-yellow-500 hover:bg-yellow-600 text-background' : 'border-[hsl(var(--border))]'}>Busy</Button>
+                  <Button onClick={() => handleAvailabilityChange('offline')} variant={readerAvailability === 'offline' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'offline' ? 'bg-slate-500 hover:bg-slate-600 text-primary-foreground' : 'border-[hsl(var(--border))]'}>Offline</Button>
                 </div>
               </CardFooter>
             )}
@@ -242,21 +290,60 @@ export default function DashboardPage() {
 
             <TabsContent value="sessions" className="p-6 bg-[hsl(var(--card))] border border-t-0 border-[hsl(var(--border)/0.7)] rounded-b-lg shadow-xl">
               <h3 className="text-2xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] mb-6">Session History</h3>
-              {/* Placeholder for session history list */}
-              <div className="border border-dashed border-[hsl(var(--border)/0.5)] rounded-md p-8 text-center text-muted-foreground font-playfair-display">
-                <CalendarClock className="mx-auto h-12 w-12 mb-3"/>
-                No sessions recorded yet.
-                {userRole === 'client' && <Link href="/readers" className="block mt-2 text-[hsl(var(--primary))] hover:underline">Find a Reader to start a session.</Link>}
-                 {userRole === 'reader' && pendingSessions.length === 0 && <p className="mt-2">No new session requests.</p>}
-              </div>
+              {sessionHistory.length > 0 ? (
+                <ScrollArea className="max-h-[500px]">
+                  <ul className="space-y-4">
+                    {sessionHistory.map((session) => (
+                      <li key={session.sessionId} className="p-4 bg-[hsl(var(--background)/0.6)] rounded-lg border border-[hsl(var(--border)/0.4)]">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
+                           <div className="flex items-center gap-3">
+                            {getSessionTypeIcon(session.sessionType)}
+                            <span className="font-semibold text-foreground/90 font-playfair-display capitalize">
+                              {session.sessionType} Session with {currentUser.uid === session.clientUid ? session.readerName : session.clientName}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            session.status === 'active' ? 'bg-yellow-500/20 text-yellow-400' :
+                            (session.status === 'ended' || session.status === 'ended_insufficient_funds') ? 'bg-green-500/20 text-green-400' :
+                            session.status === 'pending' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-slate-500/20 text-slate-400'
+                          }`}>
+                            {session.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground font-playfair-display space-y-1">
+                          <p>Date: {session.requestedAt.toDate().toLocaleDateString()}</p>
+                          <p>Time: {session.startedAt ? session.startedAt.toDate().toLocaleTimeString() : session.requestedAt.toDate().toLocaleTimeString()}</p>
+                          {session.totalMinutes !== undefined && <p>Duration: {session.totalMinutes} min</p>}
+                          {session.amountCharged !== undefined && <p>Amount: ${session.amountCharged.toFixed(2)}</p>}
+                        </div>
+                        {session.status === 'active' && (
+                           <Button asChild size="sm" className="mt-3 w-full sm:w-auto bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+                            <Link href={`/session/${session.sessionId}`}>Rejoin Session</Link>
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollArea>
+              ) : (
+                <div className="border border-dashed border-[hsl(var(--border)/0.5)] rounded-md p-8 text-center text-muted-foreground font-playfair-display">
+                  <History className="mx-auto h-12 w-12 mb-3"/>
+                  No sessions recorded yet.
+                  {userRole === 'client' && <Link href="/readers" className="block mt-2 text-[hsl(var(--primary))] hover:underline">Find a Reader to start a session.</Link>}
+                  {userRole === 'reader' && pendingSessions.length === 0 && <p className="mt-2">No new session requests.</p>}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="account" className="p-6 bg-[hsl(var(--card))] border border-t-0 border-[hsl(var(--border)/0.7)] rounded-b-lg shadow-xl">
               <h3 className="text-2xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] mb-6">Account Management</h3>
               <div className="space-y-4">
-                <Button variant="outline" className="w-full justify-start text-left"><Settings className="mr-2 h-5 w-5" /> Manage Profile Information</Button>
-                <Button variant="outline" className="w-full justify-start text-left"><DollarSign className="mr-2 h-5 w-5" /> Billing & Payments</Button>
-                <Button variant="outline" className="w-full justify-start text-left"><ShieldCheck className="mr-2 h-5 w-5" /> Security & Login</Button>
+                 <Button asChild variant="outline" className="w-full justify-start text-left border-[hsl(var(--border))] text-foreground/90 hover:bg-[hsl(var(--muted))]">
+                  <Link href="/profile/edit"><Settings className="mr-2 h-5 w-5" /> Manage Profile Information</Link>
+                </Button>
+                <Button variant="outline" className="w-full justify-start text-left border-[hsl(var(--border))] text-foreground/90 hover:bg-[hsl(var(--muted))]"><DollarSign className="mr-2 h-5 w-5" /> Billing & Payments</Button>
+                <Button variant="outline" className="w-full justify-start text-left border-[hsl(var(--border))] text-foreground/90 hover:bg-[hsl(var(--muted))]"><ShieldCheck className="mr-2 h-5 w-5" /> Security & Login</Button>
                 <Button onClick={logout} variant="destructive" className="w-full justify-start text-left"><LogOut className="mr-2 h-5 w-5" /> Logout</Button>
               </div>
             </TabsContent>
