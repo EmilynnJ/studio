@@ -9,6 +9,10 @@ export default {
   ],
   theme: {
   	extend: {
+      fontFamily: {
+        'alex-brush': ['var(--font-alex-brush)', 'cursive'],
+        'playfair-display': ['var(--font-playfair-display)', 'serif'],
+      },
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
@@ -43,6 +47,9 @@ export default {
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
+        'soulseer-pink': 'hsl(var(--soulseer-pink))',
+        'soulseer-gold': 'hsl(var(--soulseer-gold))',
+        'soulseer-header-pink': 'hsl(var(--soulseer-header-pink))',
   			chart: {
   				'1': 'hsl(var(--chart-1))',
   				'2': 'hsl(var(--chart-2))',
