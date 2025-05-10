@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { AppUser } from '@/types/user';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { v4 as uuidv4 } from 'uuid';
 
 // Default ICE servers
 const defaultIceServers = [
@@ -27,8 +28,6 @@ const defaultIceServers = [
 ];
 
 let iceServersList = defaultIceServers;
-// Check for custom ICE servers from environment variables
-// Note: NEXT_PUBLIC_ prefix is essential for client-side access in Next.js
 const iceServerConfigString = process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS;
 
 if (iceServerConfigString) {
@@ -50,7 +49,7 @@ const servers = {
   iceCandidatePoolSize: 10,
 };
 
-type CallRole = 'caller' | 'callee' | 'unknown'; // caller is Reader, callee is Client
+type CallRole = 'caller' | 'callee' | 'unknown';
 type CallStatus = 'idle' | 'loading_session' | 'waiting_permission' | 'permission_granted' | 'connecting' | 'connected' | 'disconnected' | 'error' | 'ended';
 type SessionType = 'video' | 'audio' | 'chat';
 
@@ -64,17 +63,18 @@ interface VideoSessionData {
   requestedAt: Timestamp;
   startedAt?: Timestamp;
   endedAt?: Timestamp;
-  sessionType: SessionType; // Now mandatory
+  sessionType: SessionType;
   totalMinutes?: number; 
   amountCharged?: number; 
 }
 
 interface ChatMessage {
-  id?: string;
+  id: string; // Now mandatory, generated client-side
   senderUid: string;
   senderName: string;
   text: string;
-  timestamp: Timestamp | null;
+  timestamp: string; // ISO string for DataChannel
+  isOwn: boolean; // To differentiate UI, set client-side
 }
 
 const VideoCallPage: NextPage = () => {
@@ -88,6 +88,8 @@ const VideoCallPage: NextPage = () => {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const dataChannelRef = useRef<RTCDataChannel | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const [sessionData, setSessionData] = useState<VideoSessionData | null>(null);
   const [opponent, setOpponent] = useState<Pick<AppUser, 'name' | 'uid' | 'photoURL'> | null>(null);
@@ -102,10 +104,38 @@ const VideoCallPage: NextPage = () => {
   const [sessionTimer, setSessionTimer] = useState(0);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const determinedSessionType = sessionData?.sessionType || 'chat'; // Default to chat if somehow not set
-
+  const determinedSessionType = sessionData?.sessionType || 'chat'; 
   const isLoading = callStatus === 'idle' || callStatus === 'loading_session' || callStatus === 'waiting_permission';
   const isMediaSession = determinedSessionType === 'video' || determinedSessionType === 'audio';
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(scrollToBottom, [chatMessages, scrollToBottom]);
+
+  const setupDataChannelEvents = useCallback((dc: RTCDataChannel) => {
+    dc.onopen = () => {
+      console.log('Data channel opened');
+      toast({ title: 'Chat Connected', description: 'You can now send messages.' });
+    };
+    dc.onmessage = (event) => {
+      try {
+        const receivedMsg: Omit<ChatMessage, 'id' | 'isOwn'> = JSON.parse(event.data);
+        setChatMessages(prev => [...prev, { ...receivedMsg, id: uuidv4(), isOwn: false }]);
+      } catch (e) {
+        console.error("Failed to parse chat message:", e);
+      }
+    };
+    dc.onclose = () => {
+      console.log('Data channel closed');
+      toast({ title: 'Chat Disconnected', description: 'Message channel closed.', variant: 'destructive'});
+    };
+    dc.onerror = (error) => {
+      console.error('Data channel error:', error);
+      toast({ variant: 'destructive', title: 'Chat Error', description: 'An error occurred with the message channel.' });
+    };
+  }, [toast]);
 
 
   useEffect(() => {
@@ -146,7 +176,7 @@ const VideoCallPage: NextPage = () => {
             setOpponent({ name: opponentData.name || 'Participant', uid: opponentData.uid, photoURL: opponentData.photoURL });
           }
         }
-        if (callStatus === 'loading_session' || callStatus === 'idle') { // Only transition if it's an initial load
+        if (callStatus === 'loading_session' || callStatus === 'idle') {
             setCallStatus('waiting_permission');
         }
       } else {
@@ -156,15 +186,13 @@ const VideoCallPage: NextPage = () => {
       }
     });
     return () => unsubscribe();
-  }, [currentUser, sessionId, router, toast]);
+  }, [currentUser, sessionId, router, toast, callStatus]);
   
   useEffect(() => {
-    // Initialize video/mute state based on session type
     if (sessionData) {
       const type = sessionData.sessionType;
-      if (type === 'audio') {
-        setIsVideoOff(true); 
-      } else if (type === 'chat') {
+      if (type === 'audio') setIsVideoOff(true); 
+      else if (type === 'chat') {
         setIsVideoOff(true);
         setIsMuted(true); 
       }
@@ -219,19 +247,15 @@ const VideoCallPage: NextPage = () => {
       return;
     }
 
-    if (sessionData.sessionType === 'chat') {
-      setCallStatus('connected'); 
-      if (sessionData.status !== 'active') {
-        updateDoc(doc(db, 'videoSessions', sessionId), { status: 'active', startedAt: serverTimestamp() });
-      }
-      return; 
-    }
+    // For chat-only sessions, WebRTC peer connection is still needed for DataChannel
+    // If it was previously set to 'connected' for chat only, it would skip PC setup.
+    // So, we proceed to set up PC for all session types.
 
     setCallStatus('connecting');
     const pc = new RTCPeerConnection(servers);
     peerConnectionRef.current = pc;
 
-    if (localStreamRef.current) {
+    if (localStreamRef.current && isMediaSession) { // Only add tracks if it's a media session
         localStreamRef.current.getTracks().forEach(track => {
           try {
             pc.addTrack(track, localStreamRef.current!);
@@ -240,26 +264,29 @@ const VideoCallPage: NextPage = () => {
           }
         });
     }
-
-    pc.ontrack = event => {
-      if (remoteVideoRef.current && event.streams && event.streams[0]) {
-        remoteVideoRef.current.srcObject = event.streams[0];
-        const videoTrack = event.streams[0].getVideoTracks()[0];
-        if (videoTrack) {
-          setRemoteVideoActuallyOff(!videoTrack.enabled); // Initial state
-          videoTrack.onmute = () => { console.log("Remote video muted"); setRemoteVideoActuallyOff(true); };
-          videoTrack.onunmute = () => { console.log("Remote video unmuted"); setRemoteVideoActuallyOff(false); };
-        } else {
-           setRemoteVideoActuallyOff(true); 
-        }
-        const audioTrack = event.streams[0].getAudioTracks()[0];
-         if (audioTrack) {
-            audioTrack.onmute = () => console.log("Remote audio muted");
-            audioTrack.onunmute = () => console.log("Remote audio unmuted");
-         }
-
-      }
+    
+    // DataChannel setup for callee
+    pc.ondatachannel = (event) => {
+      const dc = event.channel;
+      setupDataChannelEvents(dc);
+      dataChannelRef.current = dc;
     };
+
+    if (isMediaSession) {
+        pc.ontrack = event => {
+          if (remoteVideoRef.current && event.streams && event.streams[0]) {
+            remoteVideoRef.current.srcObject = event.streams[0];
+            const videoTrack = event.streams[0].getVideoTracks()[0];
+            if (videoTrack) {
+              setRemoteVideoActuallyOff(!videoTrack.enabled); 
+              videoTrack.onmute = () => { console.log("Remote video muted"); setRemoteVideoActuallyOff(true); };
+              videoTrack.onunmute = () => { console.log("Remote video unmuted"); setRemoteVideoActuallyOff(false); };
+            } else {
+              setRemoteVideoActuallyOff(true); 
+            }
+          }
+        };
+    }
     
     pc.onconnectionstatechange = async () => {
       console.log("Connection state:", pc.connectionState);
@@ -270,20 +297,31 @@ const VideoCallPage: NextPage = () => {
             await updateDoc(doc(db, 'videoSessions', sessionId), { status: 'active', startedAt: serverTimestamp() });
           }
           toast({title: "Connection Established", description: `Connected with ${opponent?.name || 'participant'}.`, variant: "default"});
+          // If caller, and datachannel not yet open (e.g. if created after 'connected' state for some reason)
+          // This ensures data channel is robustly established
+          if (callRole === 'caller' && !dataChannelRef.current && peerConnectionRef.current) {
+             console.log("Caller attempting to re-establish data channel post-connection (if needed).")
+             const dc = peerConnectionRef.current.createDataChannel('chat');
+             setupDataChannelEvents(dc);
+             dataChannelRef.current = dc;
+          }
           break;
         case 'disconnected':
-          setCallStatus('disconnected');
-          toast({title: "Disconnected", description: "Connection lost. Attempting to reconnect...", variant: "destructive"});
-          // Consider attempting to reconnect here or prompting user
-          break;
         case 'failed':
-          setCallStatus('error');
-          toast({title: "Connection Failed", description: "Could not establish connection.", variant: "destructive"});
-          // handleHangUp(); // Or prompt user before ending
-          break;
         case 'closed':
-          setCallStatus('ended'); // If closed not by hangup, treat as ended.
-          // handleHangUp(); // this might be redundant if hangUp caused the close
+          if (pc.connectionState === 'disconnected') {
+            setCallStatus('disconnected');
+            toast({title: "Disconnected", description: "Connection lost. Attempting to reconnect...", variant: "destructive"});
+          } else if (pc.connectionState === 'failed') {
+            setCallStatus('error');
+            toast({title: "Connection Failed", description: "Could not establish connection.", variant: "destructive"});
+          } else { // closed
+             // If closed not by user hangup, this could be an issue or normal termination
+            if (callStatus !== 'ended') { // Avoid double handling if already ended by user
+                 console.log("Peer connection closed, handling as session end.");
+                 // handleHangUp(false); // Let user manually end or rely on sessionData status changes
+            }
+          }
           break;
         case 'connecting':
           setCallStatus('connecting');
@@ -316,6 +354,14 @@ const VideoCallPage: NextPage = () => {
             await setDoc(roomRef, { createdAt: serverTimestamp(), creatorUid: currentUser.uid, sessionId: sessionId });
           }
           
+          // Create DataChannel for caller
+          if (!dataChannelRef.current && peerConnectionRef.current) {
+            const dc = peerConnectionRef.current.createDataChannel('chat');
+            setupDataChannelEvents(dc);
+            dataChannelRef.current = dc;
+            console.log("Caller created data channel.");
+          }
+
           const offerDescription = await pc.createOffer();
           await pc.setLocalDescription(offerDescription);
           await updateDoc(roomRef, { offer: { sdp: offerDescription.sdp, type: offerDescription.type }});
@@ -378,43 +424,45 @@ const VideoCallPage: NextPage = () => {
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
       }
+      if (dataChannelRef.current) {
+        dataChannelRef.current.close();
+        dataChannelRef.current = null;
+      }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, sessionId, callRole, callStatus, sessionData, toast, mediaPermissionsStatus]);
+  }, [currentUser, sessionId, callRole, callStatus, sessionData, toast, mediaPermissionsStatus, isMediaSession, setupDataChannelEvents]);
 
 
-  useEffect(() => {
-    if (!sessionId) return;
-    const messagesCollectionRef = collection(db, 'webrtcRooms', sessionId, 'messages');
-    const q = query(messagesCollectionRef, orderBy('timestamp', 'asc'));
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const msgs: ChatMessage[] = [];
-      querySnapshot.forEach((doc) => {
-        msgs.push({ id: doc.id, ...doc.data() } as ChatMessage);
-      });
-      setChatMessages(msgs);
-    });
-
-    return () => unsubscribe();
-  }, [sessionId]);
+  // Removed Firestore chat message listener useEffect
+  // useEffect(() => {
+  //   if (!sessionId) return;
+  //   const messagesCollectionRef = collection(db, 'webrtcRooms', sessionId, 'messages');
+  //   const q = query(messagesCollectionRef, orderBy('timestamp', 'asc'));
+  //   const unsubscribe = onSnapshot(q, ...);
+  //   return () => unsubscribe();
+  // }, [sessionId]);
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim() || !currentUser || !sessionId) return;
+    if (!chatInput.trim() || !currentUser || !sessionId || !dataChannelRef.current) return;
 
-    const messagesCollectionRef = collection(db, 'webrtcRooms', sessionId, 'messages');
-    try {
-      await addDoc(messagesCollectionRef, {
+    if (dataChannelRef.current.readyState === 'open') {
+      const messageToSend: Omit<ChatMessage, 'id' | 'isOwn'> = {
         senderUid: currentUser.uid,
         senderName: currentUser.name || 'User',
         text: chatInput.trim(),
-        timestamp: serverTimestamp(),
-      });
-      setChatInput('');
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({ variant: 'destructive', title: 'Chat Error', description: 'Could not send message.' });
+        timestamp: new Date().toISOString(),
+      };
+      try {
+        dataChannelRef.current.send(JSON.stringify(messageToSend));
+        // Local echo
+        setChatMessages(prev => [...prev, { ...messageToSend, id: uuidv4(), isOwn: true }]);
+        setChatInput('');
+      } catch (error) {
+        console.error("Error sending message via DataChannel:", error);
+        toast({ variant: 'destructive', title: 'Chat Error', description: 'Could not send message.' });
+      }
+    } else {
+      toast({ variant: 'destructive', title: 'Chat Error', description: 'Message channel is not open.' });
     }
   };
   
@@ -434,7 +482,7 @@ const VideoCallPage: NextPage = () => {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
-       if (sessionData?.status !== 'active' && sessionData?.status !== 'pending') { // if ended or cancelled
+       if (sessionData?.status !== 'active' && sessionData?.status !== 'pending') { 
         if(sessionData?.startedAt && sessionData?.endedAt) {
             const elapsed = sessionData.endedAt.seconds - sessionData.startedAt.seconds;
             setSessionTimer(elapsed > 0 ? elapsed : 0);
@@ -458,7 +506,7 @@ const VideoCallPage: NextPage = () => {
 
 
   const handleHangUp = useCallback(async (isPageUnload = false) => {
-    if (callStatus === 'ended' || callStatus === 'error') return; // Already ended or in error state
+    if (callStatus === 'ended') return; 
 
     setCallStatus('ended'); 
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -468,6 +516,10 @@ const VideoCallPage: NextPage = () => {
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
 
+    if (dataChannelRef.current) {
+        dataChannelRef.current.close();
+        dataChannelRef.current = null;
+    }
     if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
@@ -484,28 +536,25 @@ const VideoCallPage: NextPage = () => {
             if (currentSession.startedAt) {
                 const endTime = Timestamp.now();
                 totalMinutes = Math.ceil((endTime.seconds - currentSession.startedAt.seconds) / 60);
-                 // Update timer one last time
                 const elapsed = endTime.seconds - currentSession.startedAt.seconds;
                 setSessionTimer(elapsed > 0 ? elapsed : 0);
-            } else if (currentSession.totalMinutes) { // if already ended from other side
+            } else if (currentSession.totalMinutes) { 
                 totalMinutes = currentSession.totalMinutes;
             }
-
 
             await updateDoc(videoSessionDocRef, { 
                 status: 'ended', 
                 endedAt: serverTimestamp(),
                 totalMinutes: totalMinutes,
-                // amountCharged: ... // Stripe billing logic would go here
             });
         }
       }
 
-      if (callRole === 'caller' && isMediaSession) { 
+      if (callRole === 'caller') { 
         const roomRef = doc(db, 'webrtcRooms', sessionId);
         try {
           const batch = writeBatch(db);
-          const subcollections = ['callerCandidates', 'calleeCandidates', 'messages'];
+          const subcollections = ['callerCandidates', 'calleeCandidates', 'messages']; // Ensure 'messages' is cleaned if it was Firestore based for signaling room persistence.
           for (const subcoll of subcollections) {
             const q = query(collection(roomRef, subcoll));
             const docsSnap = await getDocs(q);
@@ -519,23 +568,23 @@ const VideoCallPage: NextPage = () => {
       }
       if (!isPageUnload) {
         toast({ title: 'Session Ended', description: 'The session has been successfully ended.' });
-        router.push('/dashboard'); // Redirect to dashboard or relevant page
+        router.push('/dashboard'); 
       }
     } else if (!isPageUnload) {
          router.push('/');
     }
-  }, [sessionId, currentUser, callRole, router, toast, isMediaSession, callStatus]);
+  }, [sessionId, currentUser, callRole, router, toast, callStatus]); // Added callStatus to deps
 
   useEffect(() => {
     const cleanup = () => {
-      if (peerConnectionRef.current || localStreamRef.current) {
-        handleHangUp(true); // Pass true for page unload
+      if (peerConnectionRef.current || localStreamRef.current || dataChannelRef.current) {
+        handleHangUp(true); 
       }
     };
     window.addEventListener('beforeunload', cleanup);
     return () => {
       window.removeEventListener('beforeunload', cleanup);
-       if (peerConnectionRef.current || localStreamRef.current) { // Cleanup if component unmounts for other reasons
+       if (peerConnectionRef.current || localStreamRef.current || dataChannelRef.current) { 
            handleHangUp(false);
        }
     };
@@ -561,15 +610,10 @@ const VideoCallPage: NextPage = () => {
         track.enabled = !newVideoOffState;
       });
       setIsVideoOff(newVideoOffState);
-      // Update local video display immediately
       if (localVideoRef.current) {
         if (newVideoOffState) {
-          localVideoRef.current.srcObject = null; // Or show a placeholder/avatar
+          localVideoRef.current.srcObject = null; 
         } else if (localStreamRef.current) {
-          // Ensure the stream with the now-enabled video track is reassigned
-          // This might require re-creating a new stream with only the video track if srcObject doesn't update
-          // For simplicity, we assume srcObject updates if tracks within it are enabled/disabled
-          // However, best practice might involve a more explicit update or using a MediaStreamTrack.onmute/onunmute
            localVideoRef.current.srcObject = localStreamRef.current;
         }
       }
@@ -630,7 +674,7 @@ const VideoCallPage: NextPage = () => {
           Session Time: {formatTime(sessionTimer)}
         </p>
       )}
-      {callStatus === 'connecting' && isMediaSession && (
+      {callStatus === 'connecting' && ( // Show for any connecting session
         <p className="font-playfair-display text-base sm:text-lg text-foreground/80 mt-1 sm:mt-2 animate-pulse">
           Attempting to connect to {opponent?.name || 'participant'}...
         </p>
@@ -652,7 +696,7 @@ const VideoCallPage: NextPage = () => {
     userType: 'Your View' | 'Remote View', 
     videoRef: React.RefObject<HTMLVideoElement> | null, 
     isLocal: boolean,
-    mediaStream: MediaStream | null, // Pass the stream directly
+    mediaStream: MediaStream | null, 
     photoURL?: string | null,
     name?: string | null,
   }) => {
@@ -736,10 +780,10 @@ const VideoCallPage: NextPage = () => {
             <CardTitle className="text-base sm:text-lg md:text-xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] flex items-center"><MessageSquare className="mr-2 h-4 w-4 sm:h-5 sm:w-5"/> Session Chat</CardTitle>
           </CardHeader>
           <CardContent className="flex-grow overflow-hidden p-0">
-            <ScrollArea className={`${determinedSessionType === 'chat' && !isMediaSession ? 'h-[calc(100%-110px)]' : 'h-[200px] sm:h-[250px] md:h-[300px] lg:h-[calc(100%-70px)]'} p-2 sm:p-3 md:p-4`}>
+             <ScrollArea className={`${determinedSessionType === 'chat' && !isMediaSession ? 'h-[calc(100%-110px)]' : 'h-[200px] sm:h-[250px] md:h-[300px] lg:h-[calc(100%-70px)]'} p-2 sm:p-3 md:p-4`}>
               {chatMessages.map((msg) => (
-                <div key={msg.id} className={`mb-2 sm:mb-3 p-2 sm:p-3 rounded-lg max-w-[85%] shadow-sm ${msg.senderUid === currentUser?.uid ? 'ml-auto bg-[hsl(var(--primary)/0.3)] text-right' : 'mr-auto bg-[hsl(var(--muted))] text-left'}`}>
-                  <p className="text-xs text-muted-foreground font-semibold">{msg.senderName} <span className="text-xs opacity-70 ml-1">{msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span></p>
+                <div key={msg.id} className={`mb-2 sm:mb-3 p-2 sm:p-3 rounded-lg max-w-[85%] shadow-sm ${msg.isOwn ? 'ml-auto bg-[hsl(var(--primary)/0.3)] text-right' : 'mr-auto bg-[hsl(var(--muted))] text-left'}`}>
+                  <p className="text-xs text-muted-foreground font-semibold">{msg.senderName} <span className="text-xs opacity-70 ml-1">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></p>
                   <p className="text-sm font-playfair-display text-foreground/90 break-words whitespace-pre-wrap">{msg.text}</p>
                 </div>
               ))}
@@ -749,6 +793,7 @@ const VideoCallPage: NextPage = () => {
                   No messages yet.
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </ScrollArea>
           </CardContent>
           <form onSubmit={handleSendMessage} className="p-2 sm:p-3 md:p-4 border-t border-[hsl(var(--border)/0.5)] flex gap-2 items-center">
@@ -758,9 +803,9 @@ const VideoCallPage: NextPage = () => {
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               className="bg-input text-foreground flex-grow h-9 sm:h-10 text-sm"
-              disabled={callStatus !== 'connected'}
+              disabled={callStatus !== 'connected' || !dataChannelRef.current || dataChannelRef.current.readyState !== 'open'}
             />
-            <Button type="submit" size="icon" className="bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0" disabled={callStatus !== 'connected' || !chatInput.trim()}>
+            <Button type="submit" size="icon" className="bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0" disabled={callStatus !== 'connected' || !chatInput.trim() || !dataChannelRef.current || dataChannelRef.current.readyState !== 'open'}>
               <Send className="h-4 w-4 sm:h-5 sm:w-5"/>
             </Button>
           </form>
@@ -799,7 +844,7 @@ const VideoCallPage: NextPage = () => {
             variant="destructive" 
             size="default" 
             className="px-3 py-2 sm:px-4" 
-            disabled={callStatus === 'ended' || callStatus === 'error'} // Disable if already ended or errored
+            disabled={callStatus === 'ended' || callStatus === 'error'}
             title="End Session"
         >
           <PhoneOff className="h-5 w-5 sm:h-6 sm:w-6" /> <span className="ml-1 sm:ml-2 font-playfair-display text-xs sm:text-sm">End Session</span>
@@ -812,7 +857,6 @@ const VideoCallPage: NextPage = () => {
             <AlertTitle className="font-alex-brush text-lg sm:text-xl text-[hsl(var(--soulseer-header-pink))]">Session Ended</AlertTitle>
             <AlertDescription className="font-playfair-display text-sm sm:text-base text-foreground/80">
                 The session has concluded. Total time: {formatTime(sessionData.totalMinutes ? sessionData.totalMinutes * 60 : sessionTimer)}.
-                {/* Billing info placeholder: Amount charged: $XX.XX */}
             </AlertDescription>
              <Button onClick={() => router.push('/dashboard')} className="mt-4 w-full">Back to Dashboard</Button>
         </Alert>
