@@ -21,7 +21,7 @@ export interface Reader {
   imageUrl: string;
   status?: 'online' | 'offline' | 'busy';
   shortBio?: string;
-  ratePerMinute?: number; // Added rate per minute
+  ratePerMinute?: number; 
   dataAiHint?: string;
   email?: string; 
   role?: 'reader'; 
@@ -54,6 +54,11 @@ export function ReaderCard({ reader }: ReaderCardProps) {
       toast({ variant: 'destructive', title: 'Reader Offline', description: 'This reader is currently not available for new sessions.' });
       return;
     }
+     if (currentUser.role === 'client' && typeof currentUser.balance === 'number' && typeof reader.ratePerMinute === 'number' && currentUser.balance < reader.ratePerMinute && reader.ratePerMinute > 0) {
+      toast({ variant: 'destructive', title: 'Insufficient Funds', description: 'Your balance is too low to start a session with this reader.' });
+      return;
+    }
+
 
     const sessionId = uuidv4();
     try {
@@ -63,13 +68,15 @@ export function ReaderCard({ reader }: ReaderCardProps) {
         readerUid: reader.id,
         readerName: reader.name,
         readerPhotoURL: reader.imageUrl, 
-        readerRatePerMinute: reader.ratePerMinute, // Store reader's rate
+        readerRatePerMinute: reader.ratePerMinute || 0, // Store reader's rate at time of booking
         clientUid: currentUser.uid,
         clientName: currentUser.name || 'Client',
         clientPhotoURL: currentUser.photoURL || null, 
         status: 'pending', 
         requestedAt: serverTimestamp(),
-        sessionType: sessionType, 
+        sessionType: sessionType,
+        amountCharged: 0, // Initialize amountCharged
+        totalMinutes: 0, // Initialize totalMinutes
       });
       
       toast({ title: 'Session Requested', description: `Waiting for ${reader.name} to accept your ${sessionType} session...` });
@@ -191,6 +198,7 @@ export function ReaderCard({ reader }: ReaderCardProps) {
     </Card>
   );
 }
+
 
 
 

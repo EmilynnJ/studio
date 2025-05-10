@@ -1,10 +1,11 @@
+
 'use client';
 
 import 'webrtc-adapter'; // Import for side-effects (browser shimming)
 import type { NextPage } from 'next';
 import { useParams, useRouter } from 'next/navigation';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, updateDoc, writeBatch, query, getDocs, deleteDoc, Timestamp, Unsubscribe } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, updateDoc, writeBatch, query, getDocs, deleteDoc, Timestamp, Unsubscribe, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
@@ -51,6 +52,23 @@ const VideoCallPage: NextPage = () => {
   const [currentAmountCharged, setCurrentAmountCharged] = useState(0);
   const [clientBalance, setClientBalance] = useState<number | undefined>(currentUser?.balance);
 
+  // Refs for state values needed in async/callback contexts to avoid stale closures
+  const callRoleRef = useRef(callRole);
+  const sessionDataRef = useRef(sessionData);
+  const clientBalanceRef = useRef(clientBalance);
+  const opponentRef = useRef(opponent);
+  const callStatusRef = useRef(callStatus);
+  const currentAmountChargedRef = useRef(currentAmountCharged);
+  const isHangingUpRef = useRef(false); // Prevents multiple hangup executions
+
+  useEffect(() => { callRoleRef.current = callRole; }, [callRole]);
+  useEffect(() => { sessionDataRef.current = sessionData; }, [sessionData]);
+  useEffect(() => { clientBalanceRef.current = clientBalance; }, [clientBalance]);
+  useEffect(() => { opponentRef.current = opponent; }, [opponent]);
+  useEffect(() => { callStatusRef.current = callStatus; }, [callStatus]);
+  useEffect(() => { currentAmountChargedRef.current = currentAmountCharged; }, [currentAmountCharged]);
+
+
   const determinedSessionType = sessionData?.sessionType || 'chat'; 
   const isMediaSession = determinedSessionType === 'video' || determinedSessionType === 'audio';
 
@@ -66,28 +84,30 @@ const VideoCallPage: NextPage = () => {
     if (!currentUser || !sessionId) return;
     setCallStatus('loading_session');
     const sessionDocRef = doc(db, 'videoSessions', sessionId);
+
     const unsubscribe = onSnapshot(sessionDocRef, async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as VideoSessionData;
+        setSessionData(data); // Update local state first
+        setCurrentAmountCharged(data.amountCharged || 0);
+
         if (data.status === 'cancelled' || data.status === 'ended' || data.status === 'ended_insufficient_funds') {
-            // Check current component callStatus to avoid redundant navigation or toasts if already handled
-            if (callStatus !== 'ended' && callStatus !== 'error') { 
+            if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error') { 
               toast({ title: 'Session Over', description: `This session has been ${data.status}. Redirecting to dashboard.`});
               router.push('/dashboard');
             }
             return;
         }
-        setSessionData(data);
-        setCurrentAmountCharged(data.amountCharged || 0);
+        
 
         let determinedRole: CallRole = 'unknown';
         let opponentUid: string | null = null;
 
         if (currentUser.uid === data.readerUid) {
-          determinedRole = 'caller'; // Reader initiates the actual WebRTC call setup after accepting
+          determinedRole = 'caller'; 
           opponentUid = data.clientUid;
         } else if (currentUser.uid === data.clientUid) {
-          determinedRole = 'callee'; // Client waits for the reader to establish connection
+          determinedRole = 'callee'; 
           opponentUid = data.readerUid;
         } else {
           toast({ variant: 'destructive', title: 'Unauthorized', description: 'You are not part of this session.' });
@@ -97,30 +117,26 @@ const VideoCallPage: NextPage = () => {
         }
         setCallRole(determinedRole);
         
-        if (opponentUid) {
+        if (opponentUid && (!opponentRef.current || opponentRef.current.uid !== opponentUid)) {
           const userDoc = await getDoc(doc(db, 'users', opponentUid));
           if (userDoc.exists()) {
             const opponentData = userDoc.data() as AppUser;
             setOpponent({ name: opponentData.name || 'Participant', uid: opponentData.uid, photoURL: opponentData.photoURL });
           } else {
-            console.warn(`Opponent document not found for UID: ${opponentUid}`);
             setOpponent({ name: 'Participant', uid: opponentUid, photoURL: null });
           }
         }
+        
         // Transition to waiting for permissions if session is loaded and role determined
-        if (callStatus === 'loading_session' || callStatus === 'idle') {
+        if (callStatusRef.current === 'loading_session' || callStatusRef.current === 'idle') {
              if(data.status === 'pending' && determinedRole === 'caller') {
-                // Reader is here but session still pending (client hasn't seen accepted_by_reader yet)
-                // Or reader just accepted and navigated here.
-                // Reader should proceed to set up the call.
                 setCallStatus('waiting_permission');
              } else if (data.status === 'pending' && determinedRole === 'callee'){
-                // Client is here, reader hasn't accepted or client hasn't received 'accepted_by_reader' yet
-                // UI will show waiting for reader
+                // UI will show waiting for reader, SessionStatusDisplay handles this
              } else if (data.status === 'accepted_by_reader') {
                  setCallStatus('waiting_permission');
              } else if (data.status === 'active') {
-                 setCallStatus('waiting_permission'); // Potentially rejoining an active session
+                 setCallStatus('waiting_permission'); 
              }
         }
       } else {
@@ -130,52 +146,51 @@ const VideoCallPage: NextPage = () => {
       }
     });
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, sessionId, router, toast]); // Removed callStatus from deps to avoid loop on status change
+  }, [currentUser, sessionId, router, toast]);
 
 
   useEffect(() => {
-    if (sessionData) {
-      const type = sessionData.sessionType;
+    if (sessionDataRef.current) {
+      const type = sessionDataRef.current.sessionType;
       if (type === 'audio') {
-         setIsVideoOff(true); // Audio only sessions mean video is off
+         setIsVideoOff(true); 
       } else if (type === 'chat') {
-        setIsVideoOff(true); // Chat only sessions mean video is off
-        setIsMuted(true); // and audio is muted
+        setIsVideoOff(true); 
+        setIsMuted(true); 
       }
     }
-  }, [sessionData]);
+  }, []); // Run once on initial sessionData load
 
   // Effect for media permissions
   useEffect(() => {
-    if (callStatus !== 'waiting_permission' || callRole === 'unknown' || !sessionData) return;
+    if (callStatusRef.current !== 'waiting_permission' || callRoleRef.current === 'unknown' || !sessionDataRef.current) return;
 
     const requestPermissions = async () => {
       const { stream, status } = await getMediaPermissions(
-        sessionData.sessionType, 
+        sessionDataRef.current!.sessionType, 
         localVideoRef, 
-        isMuted, // Use current state of isMuted
-        isVideoOff, // Use current state of isVideoOff
+        isMuted, 
+        isVideoOff, 
         toast
       );
-      setMediaPermissionsStatus(status); // 'granted', 'denied', or 'not_needed'
+      setMediaPermissionsStatus(status); 
       if (status === 'granted' && stream) {
         localStreamRef.current = stream;
         setCallStatus('permission_granted');
-      } else if (status === 'not_needed') { // Chat session
-        setCallStatus('permission_granted'); // Proceed to connection for chat
+      } else if (status === 'not_needed') { 
+        setCallStatus('permission_granted'); 
       } else if (status === 'denied') {
-        setCallStatus('error'); // Error state, UI should reflect this
+        setCallStatus('error'); 
         toast({variant: 'destructive', title: 'Media Permissions Denied', description: 'Cannot proceed without media permissions for this session type.'});
       }
     };
     requestPermissions();
-  }, [callStatus, callRole, sessionData, toast, isMuted, isVideoOff]);
+  }, [callStatus, isMuted, isVideoOff, toast]);
 
 
   // Effect for WebRTC connection setup and signaling
   useEffect(() => {
-    if (!currentUser || !sessionId || callRole === 'unknown' || callStatus !== 'permission_granted' || !sessionData) {
+    if (!currentUser || !sessionId || callRoleRef.current === 'unknown' || callStatusRef.current !== 'permission_granted' || !sessionDataRef.current) {
       return;
     }
 
@@ -183,37 +198,28 @@ const VideoCallPage: NextPage = () => {
     const pc = new RTCPeerConnection(webrtcServersConfig);
     peerConnectionRef.current = pc;
 
-    // Add local stream tracks if it's a media session
     if (localStreamRef.current && isMediaSession) {
         localStreamRef.current.getTracks().forEach(track => {
           try {
             pc.addTrack(track, localStreamRef.current!);
-          } catch (e) {
-            console.error("Error adding track:", e);
-            toast({variant: 'destructive', title: 'WebRTC Error', description: 'Could not add media track.'});
-          }
+          } catch (e) { console.error("Error adding track:", e); }
         });
     }
     
-    // Setup data channel listener for incoming channels (callee side)
     pc.ondatachannel = (event) => {
       dataChannelRef.current = setupDataChannelEventsHandler(event.channel, setChatMessages, toast);
     };
 
-    // Handle remote tracks
     if (isMediaSession) {
         pc.ontrack = event => {
           if (remoteVideoRef.current && event.streams && event.streams[0]) {
             remoteVideoRef.current.srcObject = event.streams[0];
             const videoTrack = event.streams[0].getVideoTracks()[0];
             if (videoTrack) {
-              // Initial state of remote video based on track's enabled state
               setRemoteVideoActuallyOff(!videoTrack.enabled); 
-              // Listen for changes (e.g. remote user toggles camera)
               videoTrack.onmute = () => setRemoteVideoActuallyOff(true);
               videoTrack.onunmute = () => setRemoteVideoActuallyOff(false);
             } else {
-              // No video track implies remote video is off
               setRemoteVideoActuallyOff(true); 
             }
           }
@@ -227,17 +233,21 @@ const VideoCallPage: NextPage = () => {
           setCallStatus('connected');
           if (sessionDataRef.current && (sessionDataRef.current.status !== 'active' || !sessionDataRef.current.startedAt)) {
             const rate = sessionDataRef.current.readerRatePerMinute || 0;
-            const currentClientBalance = clientBalanceRef.current;
+            const currentClientBalance = clientBalanceRef.current; // Use ref
 
             if (callRoleRef.current === 'callee' && typeof currentClientBalance === 'number' && currentClientBalance < rate && rate > 0) {
                 toast({ variant: 'destructive', title: 'Insufficient Funds', description: 'Your balance is too low to start this session.' });
                 await handleHangUp(false, 'ended_insufficient_funds');
                 return;
             }
-            await updateDoc(doc(db, 'videoSessions', sessionId), { status: 'active', startedAt: serverTimestamp() });
+            const sessionDocRef = doc(db, 'videoSessions', sessionId);
+            // Update only if not already active (idempotency for reconnects)
+            const currentSessionSnap = await getDoc(sessionDocRef);
+            if (currentSessionSnap.exists() && currentSessionSnap.data().status !== 'active') {
+                 await updateDoc(sessionDocRef, { status: 'active', startedAt: serverTimestamp() });
+            }
           }
           toast({title: "Connection Established", description: `Connected with ${opponentRef.current?.name || 'participant'}.`, variant: "default"});
-          // Caller creates data channel if it doesn't exist (e.g. first time connecting)
           if (callRoleRef.current === 'caller' && !dataChannelRef.current && peerConnectionRef.current) {
              const dc = peerConnectionRef.current.createDataChannel('chat', {reliable: true});
              dataChannelRef.current = setupDataChannelEventsHandler(dc, setChatMessages, toast);
@@ -246,19 +256,16 @@ const VideoCallPage: NextPage = () => {
         case 'disconnected': 
           setCallStatus('disconnected'); 
           toast({title: "Disconnected", description: "Connection lost. Attempting to reconnect...", variant: "destructive"}); 
-          // Note: Robust reconnect logic (e.g., ICE restarts, re-signaling) can be complex.
-          // The browser might attempt some reconnection automatically. For a custom flow, more logic would be needed here.
           break;
         case 'failed': 
           setCallStatus('error'); 
           toast({title: "Connection Failed", description: "Could not establish connection.", variant: "destructive"}); 
-          await handleHangUp(false, 'ended'); // End session on hard failure
+          await handleHangUp(false, 'ended'); 
           break;
         case 'closed': 
-          // Only log if not already handled by local hangup or session ending
-          if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error') {
+          if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error' && !isHangingUpRef.current) {
             console.log("Peer connection closed unexpectedly.");
-            setCallStatus('disconnected'); // Or 'ended' depending on desired behavior
+            setCallStatus('disconnected'); 
           }
           break;
         case 'connecting': setCallStatus('connecting'); break;
@@ -274,40 +281,21 @@ const VideoCallPage: NextPage = () => {
     pc.onicecandidate = event => {
       if (event.candidate) {
         const candidatesCollection = callRoleRef.current === 'caller' ? callerCandidatesCollection : calleeCandidatesCollection;
-        addDoc(candidatesCollection, event.candidate.toJSON()).catch(e => {
-          console.error("Error adding ICE candidate: ", e);
-          toast({variant: 'destructive', title: 'Signaling Error', description: 'Failed to send connection candidate.'});
-        });
+        addDoc(candidatesCollection, event.candidate.toJSON()).catch(e => console.error("Error adding ICE candidate: ", e));
       }
     };
 
     let signalingUnsubscribes: Unsubscribe[] = [];
     
-    // Refs for state values needed in async/callback contexts to avoid stale closures
-    const callRoleRef = useRef(callRole);
-    const sessionDataRef = useRef(sessionData);
-    const clientBalanceRef = useRef(clientBalance);
-    const opponentRef = useRef(opponent);
-    const callStatusRef = useRef(callStatus);
-
-    useEffect(() => { callRoleRef.current = callRole; }, [callRole]);
-    useEffect(() => { sessionDataRef.current = sessionData; }, [sessionData]);
-    useEffect(() => { clientBalanceRef.current = clientBalance; }, [clientBalance]);
-    useEffect(() => { opponentRef.current = opponent; }, [opponent]);
-    useEffect(() => { callStatusRef.current = callStatus; }, [callStatus]);
-
-
     const setupSignaling = async () => {
       try {
         const roomSnapshot = await getDoc(roomRef);
 
         if (callRoleRef.current === 'caller') { 
-          // Reader is caller: creates room if not exists, creates offer
           if (!roomSnapshot.exists()) { 
             await setDoc(roomRef, { createdAt: serverTimestamp(), creatorUid: currentUser.uid, sessionId: sessionId });
           }
           
-          // Create data channel if it's the caller and channel doesn't exist
           if (!dataChannelRef.current && peerConnectionRef.current) {
              const dc = peerConnectionRef.current.createDataChannel('chat', {reliable: true});
              dataChannelRef.current = setupDataChannelEventsHandler(dc, setChatMessages, toast);
@@ -317,17 +305,12 @@ const VideoCallPage: NextPage = () => {
           await pc.setLocalDescription(offerDescription);
           await updateDoc(roomRef, { offer: { sdp: offerDescription.sdp, type: offerDescription.type }});
 
-          // Listen for answer from callee
           signalingUnsubscribes.push(onSnapshot(roomRef, (snapshot) => {
             const data = snapshot.data();
             if (data?.answer && (!pc.currentRemoteDescription || pc.currentRemoteDescription.type !== 'answer')) {
-              pc.setRemoteDescription(new RTCSessionDescription(data.answer)).catch(e => {
-                console.error("Caller: Error setting remote description (answer):", e);
-                toast({variant: 'destructive', title: 'Connection Error', description: 'Failed to process answer.'});
-              });
+              pc.setRemoteDescription(new RTCSessionDescription(data.answer)).catch(e => console.error("Caller: Error setting remote description (answer):", e));
             }
           }));
-          // Listen for ICE candidates from callee
           iceCandidateListenersUnsub.push(onSnapshot(calleeCandidatesCollection, (snapshot) => {
             snapshot.docChanges().forEach(change => {
               if (change.type === 'added') {
@@ -337,7 +320,6 @@ const VideoCallPage: NextPage = () => {
           }));
 
         } else if (callRoleRef.current === 'callee') { 
-          // Client is callee: waits for offer, creates answer
           const handleOffer = async (offerData: RTCSessionDescriptionInit) => {
             if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') {
                 console.warn("Cannot set remote offer in current signaling state:", pc.signalingState);
@@ -352,16 +334,13 @@ const VideoCallPage: NextPage = () => {
           if (roomSnapshot.exists() && roomSnapshot.data()?.offer) {
              await handleOffer(roomSnapshot.data()!.offer);
           } else {
-            // If offer isn't there yet, listen for it
             signalingUnsubscribes.push(onSnapshot(roomRef, async (snapshot) => {
                 const data = snapshot.data();
-                // Ensure offer exists and we haven't already set a remote description or created an answer
                 if (data?.offer && !pc.currentRemoteDescription && (!pc.localDescription || pc.localDescription.type !== 'answer')) { 
                     await handleOffer(data.offer);
                 }
             }));
           }
-          // Listen for ICE candidates from caller
           iceCandidateListenersUnsub.push(onSnapshot(callerCandidatesCollection, (snapshot) => {
             snapshot.docChanges().forEach(change => {
               if (change.type === 'added') {
@@ -372,7 +351,6 @@ const VideoCallPage: NextPage = () => {
         }
       } catch (err) {
         console.error("Signaling setup error:", err);
-        toast({variant: 'destructive', title: 'Connection Error', description: 'Failed to set up signaling.'});
         setCallStatus('error');
       }
     };
@@ -391,56 +369,45 @@ const VideoCallPage: NextPage = () => {
         dataChannelRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, sessionId, mediaPermissionsStatus, isMediaSession]); // Dependencies that trigger re-setup of WebRTC. callRole, sessionData, toast, clientBalance are used via refs.
+  }, [currentUser, sessionId, isMediaSession, toast]); // Added toast, removed refs from deps
 
 
   // Session Timer Effect
   useEffect(() => {
-    const sessionDataCurrent = sessionDataRef.current;
-    if (callStatusRef.current === 'connected' && sessionDataCurrent?.status === 'active' && sessionDataCurrent?.startedAt) {
+    if (callStatusRef.current === 'connected' && sessionDataRef.current?.status === 'active' && sessionDataRef.current?.startedAt) {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       const updateTimer = () => {
         const now = Timestamp.now();
-        // Ensure startedAt is valid before calculation
         const startedAtSeconds = sessionDataRef.current?.startedAt?.seconds || now.seconds;
         const elapsed = now.seconds - startedAtSeconds;
         setSessionTimer(elapsed > 0 ? elapsed : 0);
       };
-      updateTimer(); // Initial call
+      updateTimer(); 
       timerIntervalRef.current = setInterval(updateTimer, 1000);
     } else {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      // If session ended, calculate final duration from Firestore timestamps if available
-      if (sessionDataCurrent?.status !== 'active' && sessionDataCurrent?.status !== 'pending' && sessionDataCurrent?.startedAt && sessionDataCurrent?.endedAt) {
-        const elapsed = sessionDataCurrent.endedAt.seconds - sessionDataCurrent.startedAt.seconds;
+      if (sessionDataRef.current?.status !== 'active' && sessionDataRef.current?.status !== 'pending' && sessionDataRef.current?.startedAt && sessionDataRef.current?.endedAt) {
+        const elapsed = sessionDataRef.current.endedAt.seconds - sessionDataRef.current.startedAt.seconds;
         setSessionTimer(elapsed > 0 ? elapsed : 0);
       } else if (callStatusRef.current !== 'connected' && callStatusRef.current !== 'connecting') {
-         // Reset timer if not connected and not already ended with a calculated duration
          setSessionTimer(0);
       }
     }
     return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
-  }, [callStatus]); // Rerun when callStatus changes, sessionData is accessed via ref
+  }, [callStatus]); 
 
-  // Billing Timer Effect (Handles internal balance deduction)
+  // Billing Timer Effect
   useEffect(() => {
-    const sessionDataCurrent = sessionDataRef.current;
-    const clientBalanceCurrent = clientBalanceRef.current;
-    const currentUserCurrent = currentUser; // currentUser from AuthContext should be stable or cause parent re-render
-
-    if (callStatusRef.current === 'connected' && sessionDataCurrent?.status === 'active' && callRoleRef.current === 'callee' && currentUserCurrent && sessionDataCurrent.readerRatePerMinute && typeof clientBalanceCurrent === 'number') {
+    if (callStatusRef.current === 'connected' && sessionDataRef.current?.status === 'active' && callRoleRef.current === 'callee' && currentUser && sessionDataRef.current.readerRatePerMinute && typeof clientBalanceRef.current === 'number') {
         if (billingIntervalRef.current) clearInterval(billingIntervalRef.current);
 
         const performBilling = async () => {
-            const ratePerMinute = sessionDataCurrent.readerRatePerMinute || 0;
-            if (ratePerMinute <= 0) {
-                console.warn("Reader rate is zero or not set, skipping billing cycle.");
-                return;
-            }
+            if (!sessionDataRef.current || !currentUser) return; // Guard clause
+            const ratePerMinute = sessionDataRef.current.readerRatePerMinute || 0;
+            if (ratePerMinute <= 0) return;
 
             const costForThisMinute = ratePerMinute;
-            const currentBalance = clientBalanceRef.current; // Use ref for most up-to-date value
+            const currentBalance = clientBalanceRef.current; 
 
             if (typeof currentBalance !== 'number' || currentBalance < costForThisMinute) {
                 toast({ variant: 'destructive', title: 'Insufficient Funds', description: 'Session ending due to low balance.' });
@@ -449,16 +416,13 @@ const VideoCallPage: NextPage = () => {
             }
 
             const newBalance = currentBalance - costForThisMinute;
-            await updateUserBalance(currentUserCurrent.uid, newBalance); // Update in AuthContext and Firestore
-            // AuthContext will update clientBalance state, which updates clientBalanceRef.current via its own useEffect
+            await updateUserBalance(currentUser.uid, newBalance); 
             
             const newTotalCharged = (currentAmountChargedRef.current || 0) + costForThisMinute;
-            setCurrentAmountCharged(newTotalCharged); // Updates state and ref via its own useEffect
+            setCurrentAmountCharged(newTotalCharged); 
             
             const sessionDocRef = doc(db, 'videoSessions', sessionId);
-            await updateDoc(sessionDocRef, {
-                amountCharged: newTotalCharged,
-            });
+            await updateDoc(sessionDocRef, { amountCharged: newTotalCharged });
 
             toast({ title: 'Billed', description: `$${costForThisMinute.toFixed(2)} charged for the current minute.`});
 
@@ -467,7 +431,6 @@ const VideoCallPage: NextPage = () => {
             }
         };
         
-        // Perform an initial billing for the first minute immediately upon connection and active status
         performBilling(); 
         billingIntervalRef.current = setInterval(performBilling, BILLING_INTERVAL_MS);
     } else {
@@ -475,18 +438,15 @@ const VideoCallPage: NextPage = () => {
     }
 
     return () => { if (billingIntervalRef.current) clearInterval(billingIntervalRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callStatus, currentUser, sessionId, updateUserBalance, toast]); // Other states (sessionData, clientBalance, callRole) are accessed via refs
+  }, [callStatus, currentUser, sessionId, updateUserBalance, toast]);
 
-
-  const currentAmountChargedRef = useRef(currentAmountCharged);
-  useEffect(() => { currentAmountChargedRef.current = currentAmountCharged; }, [currentAmountCharged]);
 
   const handleHangUp = useCallback(async (isPageUnload = false, reason: VideoSessionData['status'] = 'ended') => {
-    if (callStatusRef.current === 'ended' || callStatusRef.current === 'error' && reason !== 'ended_insufficient_funds') return; // Avoid multiple hangup calls unless it's a specific new reason
+    if (isHangingUpRef.current) return; // Prevent multiple executions
+    isHangingUpRef.current = true;
     
     const previousCallStatus = callStatusRef.current;
-    setCallStatus(reason === 'ended_insufficient_funds' ? 'error' : 'ended'); // Update status immediately
+    setCallStatus(reason === 'ended_insufficient_funds' ? 'error' : 'ended'); 
 
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     if (billingIntervalRef.current) clearInterval(billingIntervalRef.current);
@@ -498,129 +458,171 @@ const VideoCallPage: NextPage = () => {
 
     dataChannelRef.current?.close();
     dataChannelRef.current = null;
-    peerConnectionRef.current?.close(); // Close RTCPeerConnection
+    peerConnectionRef.current?.close(); 
     peerConnectionRef.current = null;
 
     if (sessionId && currentUser) {
       const videoSessionDocRef = doc(db, 'videoSessions', sessionId);
-      const currentSessionSnap = await getDoc(videoSessionDocRef);
+      try {
+        await runTransaction(db, async (transaction) => {
+            const currentSessionSnap = await transaction.get(videoSessionDocRef);
+            if (!currentSessionSnap.exists()) {
+                console.warn("Session document does not exist for hangup processing.");
+                return;
+            }
+            const currentSession = currentSessionSnap.data() as VideoSessionData;
+            
+            if(currentSession.status === 'ended' || currentSession.status === 'cancelled' || currentSession.status === 'ended_insufficient_funds') {
+                 console.log("Session already ended, no further updates needed for hangup:", currentSession.status);
+                 // Update local state if it wasn't already matching
+                 setSessionData(currentSession);
+                 if(sessionTimer === 0 && currentSession.startedAt && currentSession.endedAt) {
+                    const finalDuration = currentSession.endedAt.seconds - currentSession.startedAt.seconds;
+                    setSessionTimer(finalDuration > 0 ? finalDuration : 0);
+                 }
+                 return; // Avoid re-processing if already in a final state
+            }
 
-      if (currentSessionSnap.exists()) {
-        const currentSession = currentSessionSnap.data() as VideoSessionData;
-        // Only update Firestore if the session wasn't already marked as ended/cancelled by another event
-        if(currentSession.status !== 'ended' && currentSession.status !== 'cancelled' && currentSession.status !== 'ended_insufficient_funds') {
             const endTime = Timestamp.now();
-            let totalMinutesCalculated = 0;
-            let finalAmountCharged = currentAmountChargedRef.current; // Use the ref for the most accurate charge
+            let totalMinutesCalculated = currentSession.totalMinutes || 0;
+            let finalAmountCharged = currentAmountChargedRef.current;
 
             if (currentSession.startedAt) {
                 const durationSeconds = endTime.seconds - currentSession.startedAt.seconds;
-                totalMinutesCalculated = Math.ceil(durationSeconds / 60); // Calculate total minutes based on duration
-                if (sessionTimer === 0 && previousCallStatus !== 'connected') { // If timer never really ran (e.g. quick hangup)
-                    setSessionTimer(durationSeconds > 0 ? durationSeconds : 0);
+                // If timer was running, use its value for more accurate duration in seconds before rounding up for minutes
+                // Otherwise, calculate from Firestore timestamps
+                const effectiveDurationSeconds = (previousCallStatus === 'connected' && sessionTimer > 0) ? sessionTimer : durationSeconds;
+                
+                totalMinutesCalculated = Math.ceil(effectiveDurationSeconds / 60); 
+                
+                if (sessionTimer === 0 && previousCallStatus !== 'connected' && durationSeconds > 0) { 
+                    setSessionTimer(durationSeconds);
                 }
-                // Ensure amount charged reflects at least one minute if session was active, even if very short
-                // This depends on specific billing rules (e.g. minimum charge). Current logic bills per full minute interval.
-                if (totalMinutesCalculated > 0 && finalAmountCharged === 0 && currentSession.readerRatePerMinute) {
-                    // This case might occur if hangup happens before first billing interval but after connection.
-                    // For simplicity, we rely on currentAmountCharged. Complex minimums would need more logic.
+                // Ensure billing for at least one minute if session was active and rate applies
+                if (previousCallStatus === 'connected' && totalMinutesCalculated === 0 && currentSession.readerRatePerMinute && currentSession.readerRatePerMinute > 0) {
+                    totalMinutesCalculated = 1;
                 }
-            } else {
-                 totalMinutesCalculated = currentSession.totalMinutes || 0;
+                 // If billing interval didn't run for the last partial minute but connection existed.
+                if (previousCallStatus === 'connected' && totalMinutesCalculated > 0 && finalAmountCharged < totalMinutesCalculated * (currentSession.readerRatePerMinute || 0) && currentSession.readerRatePerMinute) {
+                   // This scenario needs careful handling based on exact billing rules (e.g. charge for partial minute on hangup)
+                   // For simplicity, we'll assume the currentAmountCharged from intervals is the source of truth,
+                   // or if it's zero but minutes are >0, charge for 1 minute minimum if rate exists
+                   if(finalAmountCharged === 0 && totalMinutesCalculated > 0 && currentSession.readerRatePerMinute > 0){
+                       finalAmountCharged = currentSession.readerRatePerMinute;
+                   }
+                }
+
+            } else if (reason !== 'cancelled' && reason !== 'pending') { // If no start time, but session was attempted and not just cancelled pre-start
+                totalMinutesCalculated = 0; // Or some minimum if applicable
             }
-
-
-            await updateDoc(videoSessionDocRef, { 
+            
+            transaction.update(videoSessionDocRef, { 
                 status: reason, 
                 endedAt: endTime, 
                 totalMinutes: totalMinutesCalculated,
-                amountCharged: finalAmountCharged, // Final amount charged
+                amountCharged: finalAmountCharged,
             });
-            // Update local sessionData to reflect the final state
+            // Update local sessionData to reflect the final state immediately after transaction attempt
             setSessionData(prev => prev ? ({...prev, status: reason, endedAt: endTime, totalMinutes: totalMinutesCalculated, amountCharged: finalAmountCharged}) : null);
-        }
+        });
+
+      } catch (error) {
+          console.error("Transaction failed for hangup:", error);
+          // Fallback to a simple update if transaction fails
+          try {
+            const currentSessionSnapFallback = await getDoc(videoSessionDocRef);
+            if (currentSessionSnapFallback.exists() && currentSessionSnapFallback.data().status !== 'ended' && currentSessionSnapFallback.data().status !== 'ended_insufficient_funds') {
+                 const endTime = Timestamp.now();
+                 let totalMinutesCalculated = sessionDataRef.current?.totalMinutes || 0;
+                 if(sessionDataRef.current?.startedAt) totalMinutesCalculated = Math.ceil((endTime.seconds - sessionDataRef.current.startedAt.seconds) / 60);
+                 
+                 await updateDoc(videoSessionDocRef, { 
+                    status: reason, 
+                    endedAt: endTime, 
+                    totalMinutes: totalMinutesCalculated,
+                    amountCharged: currentAmountChargedRef.current,
+                });
+            }
+          } catch (updateError) {
+            console.error("Fallback update failed for hangup:", updateError);
+          }
       }
-      // Cleanup signaling room data (typically done by the caller/reader)
+      
       if (callRoleRef.current === 'caller') { 
-        const roomRef = doc(db, 'webrtcRooms', sessionId);
+        const roomDocRef = doc(db, 'webrtcRooms', sessionId);
         try {
           const batch = writeBatch(db);
           const subcollections = ['callerCandidates', 'calleeCandidates'];
           for (const subcoll of subcollections) {
-            const q = query(collection(roomRef, subcoll));
+            const q = query(collection(roomDocRef, subcoll));
             const docsSnap = await getDocs(q);
             docsSnap.forEach(docSnapshot => batch.delete(docSnapshot.ref));
           }
-          batch.delete(roomRef); // Delete the main room document
+          batch.delete(roomDocRef); 
           await batch.commit();
         } catch (error) { console.error("Error cleaning up Firestore room:", error); }
       }
+
       if (!isPageUnload) {
-        toast({ title: reason === 'ended_insufficient_funds' ? 'Session Ended: Low Balance' : 'Session Ended' });
+        const finalReason = sessionDataRef.current?.status || reason; // Use updated sessionData status if available
+        toast({ title: finalReason === 'ended_insufficient_funds' ? 'Session Ended: Low Balance' : 'Session Ended' });
         router.push('/dashboard'); 
       }
     } else if (!isPageUnload) {
-         router.push('/'); // Fallback if no session/user
+         router.push('/'); 
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, currentUser, router, toast]); // Callbacks and refs are used for other dependencies
+    // isHangingUpRef.current = false; // Reset after operations, or ensure it's reset if user stays on page post-error
+  }, [sessionId, currentUser, router, toast, sessionTimer, updateUserBalance]); // Added sessionTimer and updateUserBalance for accurate calculations
 
   // Cleanup on unmount or page navigation
   useEffect(() => {
     const cleanup = (isUnloading = false) => { 
-      if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error') {
+      if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error' && !isHangingUpRef.current) {
          handleHangUp(isUnloading);
       }
     };
     
-    // Handle page unload (browser close/refresh)
     window.addEventListener('beforeunload', () => cleanup(true));
     
-    // Handle Next.js route changes (component unmount)
     const handleRouteChange = () => {
-        // Check if the session is still in a state that requires cleanup
         if (peerConnectionRef.current || localStreamRef.current || dataChannelRef.current) {
-            if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error') {
-                // Don't pass true for isPageUnload, as this is a route change, not a browser unload
-                // This allows toast and router.push to work if needed.
+            if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error' && !isHangingUpRef.current) {
                 handleHangUp(false); 
             }
         }
     };
-    router.events?.on('routeChangeStart', handleRouteChange); // For older Next.js versions if needed
-
+    // Next.js router events are not directly available in App Router for `routeChangeStart`.
+    // Instead, useEffect's cleanup function on component unmount is the primary way for non-unload cleanup.
+    
     return () => {
       window.removeEventListener('beforeunload', () => cleanup(true));
-      router.events?.off('routeChangeStart', handleRouteChange);
-      // Final cleanup if component unmounts for other reasons and session is still active
+      // This cleanup runs when the component unmounts, e.g. due to route change.
       cleanup(false); 
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleHangUp, router.events]);
+  }, [handleHangUp]);
 
 
   const handleToggleMute = () => {
-    if (determinedSessionType === 'chat' || !isMediaSession) return; // No mute for chat, or if not media session
+    if (determinedSessionType === 'chat' || !isMediaSession) return; 
     setIsMuted(prev => toggleMuteMedia(localStreamRef.current, prev));
   };
 
   const handleToggleVideo = () => {
-    if (determinedSessionType !== 'video') return; // Only for video sessions
+    if (determinedSessionType !== 'video') return; 
     setIsVideoOff(prev => toggleVideoMedia(localStreamRef.current, localVideoRef, prev));
   };
 
-  // Render UI based on states
   return (
     <div className="container mx-auto px-2 sm:px-4 md:px-6 py-4 sm:py-8 md:py-12">
       <SessionStatusDisplay 
         sessionType={determinedSessionType}
-        callStatus={callStatus} // Pass current callStatus directly
+        callStatus={callStatus} 
         sessionTimer={sessionTimer}
         opponent={opponent}
-        sessionData={sessionData} // Pass current sessionData
+        sessionData={sessionData} 
         mediaPermissionsStatus={mediaPermissionsStatus}
-        clientBalance={clientBalance} // Pass current clientBalance
-        currentAmountCharged={currentAmountCharged} // Pass current amount charged
+        clientBalance={clientBalance} 
+        currentAmountCharged={currentAmountCharged} 
       />
       
       <div className={`grid grid-cols-1 ${isMediaSession ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-4 sm:gap-6 items-start mt-4`}>
@@ -643,7 +645,7 @@ const VideoCallPage: NextPage = () => {
               isLocal={false} 
               mediaStream={remoteVideoRef.current?.srcObject as MediaStream || null}
               userInfo={opponent}
-              isRemoteVideoOff={remoteVideoActuallyOff} // Use state reflecting actual remote video status
+              isRemoteVideoOff={remoteVideoActuallyOff} 
               sessionType={determinedSessionType}
               callStatus={callStatus}
             />
@@ -666,7 +668,7 @@ const VideoCallPage: NextPage = () => {
         isVideoOff={isVideoOff}
         onToggleMute={handleToggleMute}
         onToggleVideo={handleToggleVideo}
-        onHangUp={() => handleHangUp(false)} // Explicitly not a page unload
+        onHangUp={() => handleHangUp(false)} 
         callStatus={callStatus}
         mediaPermissionsGranted={mediaPermissionsStatus === 'granted' || mediaPermissionsStatus === 'not_needed'}
         hasAudioTrack={!!localStreamRef.current?.getAudioTracks().length}
@@ -677,3 +679,4 @@ const VideoCallPage: NextPage = () => {
 };
 
 export default VideoCallPage;
+
