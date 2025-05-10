@@ -1,3 +1,5 @@
+'use client'; // Added "use client" directive
+
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -21,6 +23,7 @@ export interface Reader {
   dataAiHint?: string;
   email?: string; // Added email for completeness, though not directly used in card display
   role?: 'reader'; // Added role
+  sessionType?: 'video' | 'audio' | 'chat'; // Reader preferred session type
 }
 
 interface ReaderCardProps {
@@ -33,7 +36,7 @@ export function ReaderCard({ reader }: ReaderCardProps) {
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleRequestSession = async () => {
+  const handleRequestSession = async (sessionType: 'video' | 'audio' | 'chat' = 'video') => {
     if (!currentUser) {
       toast({ variant: 'destructive', title: 'Login Required', description: 'Please log in to request a session.' });
       router.push('/login');
@@ -57,12 +60,12 @@ export function ReaderCard({ reader }: ReaderCardProps) {
         readerName: reader.name,
         clientUid: currentUser.uid,
         clientName: currentUser.name || 'Client',
-        status: 'pending', // Initial status, reader needs to "join" to make it active for WebRTC
+        status: 'pending', 
         requestedAt: serverTimestamp(),
-        // Billing related fields can be added later
+        sessionType: sessionType, // Store the requested session type
       });
       
-      toast({ title: 'Session Requested', description: `Connecting you with ${reader.name}...` });
+      toast({ title: 'Session Requested', description: `Connecting you for a ${sessionType} session with ${reader.name}...` });
       router.push(`/session/${sessionId}`);
     } catch (error) {
       console.error("Error requesting session:", error);
@@ -131,17 +134,37 @@ export function ReaderCard({ reader }: ReaderCardProps) {
         </div>
         {reader.shortBio && <CardDescription className="text-sm text-foreground/80 font-playfair-display line-clamp-3 mb-2">{reader.shortBio}</CardDescription>}
       </CardContent>
-      <CardFooter className="p-6 pt-0 flex flex-col sm:flex-row gap-2">
-        <Button asChild variant="outline" className="w-full sm:w-auto flex-grow border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] font-playfair-display">
+      <CardFooter className="p-6 pt-0 flex flex-col gap-2">
+        <Button asChild variant="outline" className="w-full border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] font-playfair-display">
           <Link href={`/readers/${reader.id}`}>View Profile</Link>
         </Button>
-        <Button 
-          onClick={handleRequestSession}
-          disabled={reader.status !== 'online' || !currentUser || currentUser.uid === reader.id}
-          className="w-full sm:w-auto flex-grow bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-50"
-        >
-          Request Session
-        </Button>
+        {/* Updated to allow selection of session type */}
+        <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <Button 
+            onClick={() => handleRequestSession('video')}
+            disabled={reader.status !== 'online' || !currentUser || currentUser.uid === reader.id}
+            className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-50"
+            title="Request Video Session"
+          >
+            Video
+          </Button>
+          <Button 
+            onClick={() => handleRequestSession('audio')}
+            disabled={reader.status !== 'online' || !currentUser || currentUser.uid === reader.id}
+            className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-50"
+            title="Request Audio Session"
+          >
+            Audio
+          </Button>
+          <Button 
+            onClick={() => handleRequestSession('chat')}
+            disabled={reader.status !== 'online' || !currentUser || currentUser.uid === reader.id}
+            className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-50"
+            title="Request Chat Session"
+          >
+            Chat
+          </Button>
+        </div>
       </CardFooter>
       <svg width="0" height="0" style={{ position: 'absolute' }}>
         <defs>
