@@ -19,9 +19,11 @@ export interface VideoSessionData {
   sessionId: string;
   readerUid: string;
   readerName: string;
+  readerPhotoURL?: string | null;
   clientUid: string;
   clientName: string;
-  status: 'pending' | 'active' | 'ended' | 'cancelled';
+  clientPhotoURL?: string | null;
+  status: 'pending' | 'accepted_by_reader' | 'active' | 'ended' | 'cancelled';
   requestedAt: Timestamp;
   startedAt?: Timestamp;
   endedAt?: Timestamp;
@@ -40,3 +42,4 @@ export interface ChatMessage {
 }
 
 export interface OpponentInfo extends Pick<AppUser, 'name' | 'uid' | 'photoURL'> {}
+

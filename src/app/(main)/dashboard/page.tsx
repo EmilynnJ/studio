@@ -1,3 +1,4 @@
+
 'use client';
 import { PageTitle } from '@/components/ui/page-title';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -7,11 +8,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { AppUser } from '@/types/user';
-import { Edit3, Eye, MessageSquare, Users, DollarSign, CalendarClock, BarChart3, Settings, Bell, LogOut, ShieldCheck } from 'lucide-react';
+import type { VideoSessionData } from '@/types/session';
+import { Edit3, Eye, MessageSquare, Users, DollarSign, CalendarClock, BarChart3, Settings, Bell, LogOut, ShieldCheck, Star, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
+import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase/firebase';
+import { useToast } from '@/hooks/use-toast';
+import Image from 'next/image';
+
 
 // Placeholder data - replace with actual data fetching
 const recentActivity = [
@@ -30,8 +37,10 @@ const readerStats = {
 export default function DashboardPage() {
   const { currentUser, loading, logout, updateUserStatus } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [userRole, setUserRole] = useState<'client' | 'reader' | null>(null);
   const [readerAvailability, setReaderAvailability] = useState<'online' | 'offline' | 'busy' | undefined>(currentUser?.status);
+  const [pendingSessions, setPendingSessions] = useState<VideoSessionData[]>([]);
 
   useEffect(() => {
     if (!loading && !currentUser) {
@@ -40,9 +49,29 @@ export default function DashboardPage() {
       setUserRole(currentUser.role);
       if(currentUser.role === 'reader') {
         setReaderAvailability(currentUser.status);
+
+        // Fetch pending sessions for reader
+        const sessionsColRef = collection(db, 'videoSessions');
+        const q = query(sessionsColRef, 
+          where('readerUid', '==', currentUser.uid), 
+          where('status', '==', 'pending'),
+          orderBy('requestedAt', 'desc')
+        );
+
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+          const sessions: VideoSessionData[] = [];
+          querySnapshot.forEach((doc) => {
+            sessions.push(doc.data() as VideoSessionData);
+          });
+          setPendingSessions(sessions);
+        }, (error) => {
+          console.error("Error fetching pending sessions: ", error);
+          toast({ variant: "destructive", title: "Error", description: "Could not fetch pending sessions." });
+        });
+        return () => unsubscribe();
       }
     }
-  }, [currentUser, loading, router]);
+  }, [currentUser, loading, router, toast]);
 
   const handleAvailabilityChange = async (newStatus: 'online' | 'offline' | 'busy') => {
     if (currentUser && currentUser.role === 'reader') {
@@ -51,6 +80,19 @@ export default function DashboardPage() {
     }
   };
 
+  const handleAcceptSession = async (sessionId: string) => {
+    const sessionDocRef = doc(db, 'videoSessions', sessionId);
+    try {
+      await updateDoc(sessionDocRef, {
+        status: 'accepted_by_reader',
+      });
+      toast({ title: "Session Accepted", description: "Joining the session..." });
+      router.push(`/session/${sessionId}`);
+    } catch (error) {
+      console.error("Error accepting session:", error);
+      toast({ variant: 'destructive', title: "Error", description: "Could not accept the session." });
+    }
+  };
 
   if (loading || !currentUser) {
     return (
@@ -93,9 +135,9 @@ export default function DashboardPage() {
               <CardFooter className="flex flex-col gap-2 p-4 border-t border-[hsl(var(--border)/0.5)]">
                  <p className="text-sm font-playfair-display text-muted-foreground mb-1">Set Your Availability:</p>
                 <div className="grid grid-cols-3 gap-2 w-full">
-                  <Button onClick={() => handleAvailabilityChange('online')} variant={readerAvailability === 'online' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'online' ? 'bg-green-500 hover:bg-green-600' : ''}>Online</Button>
+                  <Button onClick={() => handleAvailabilityChange('online')} variant={readerAvailability === 'online' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'online' ? 'bg-green-500 hover:bg-green-600 text-primary-foreground' : ''}>Online</Button>
                   <Button onClick={() => handleAvailabilityChange('busy')} variant={readerAvailability === 'busy' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'busy' ? 'bg-yellow-500 hover:bg-yellow-600 text-background' : ''}>Busy</Button>
-                  <Button onClick={() => handleAvailabilityChange('offline')} variant={readerAvailability === 'offline' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'offline' ? 'bg-slate-500 hover:bg-slate-600' : ''}>Offline</Button>
+                  <Button onClick={() => handleAvailabilityChange('offline')} variant={readerAvailability === 'offline' ? 'default' : 'outline'} size="sm" className={readerAvailability === 'offline' ? 'bg-slate-500 hover:bg-slate-600 text-primary-foreground' : ''}>Offline</Button>
                 </div>
               </CardFooter>
             )}
@@ -124,8 +166,52 @@ export default function DashboardPage() {
           </Card>
         </aside>
 
-        {/* Main Content Area with Tabs */}
-        <main className="lg:col-span-2">
+        {/* Main Content Area */}
+        <main className="lg:col-span-2 space-y-6">
+           {userRole === 'reader' && pendingSessions.length > 0 && (
+            <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)] shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-2xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] flex items-center gap-2">
+                  <Clock className="h-6 w-6" /> Pending Session Requests
+                </CardTitle>
+                <CardDescription className="font-playfair-display text-muted-foreground">
+                  You have {pendingSessions.length} new session request{pendingSessions.length > 1 ? 's' : ''}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="max-h-96">
+                  <ul className="space-y-4">
+                    {pendingSessions.map((session) => (
+                      <li key={session.sessionId} className="p-4 bg-[hsl(var(--background)/0.6)] rounded-lg border border-[hsl(var(--border)/0.4)] flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                           <Avatar className="w-12 h-12">
+                            <AvatarImage src={session.clientPhotoURL || undefined} alt={session.clientName}/>
+                            <AvatarFallback>{getInitials(session.clientName)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-semibold text-foreground/90 font-playfair-display">{session.clientName}</p>
+                            <p className="text-sm text-muted-foreground font-playfair-display capitalize">
+                              Requests a {session.sessionType} session
+                            </p>
+                            <p className="text-xs text-muted-foreground/80 font-playfair-display">
+                              Requested: {session.requestedAt ? new Timestamp(session.requestedAt.seconds, session.requestedAt.nanoseconds).toDate().toLocaleString() : 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+                        <Button 
+                          onClick={() => handleAcceptSession(session.sessionId)}
+                          className="w-full sm:w-auto bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)]"
+                        >
+                          <CheckCircle className="mr-2 h-4 w-4" /> Accept Session
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+
           <Tabs defaultValue={userRole === 'reader' ? 'overview' : 'sessions'} className="w-full">
             <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 bg-[hsl(var(--card)/0.8)] border-b-0 rounded-t-lg p-1">
               {userRole === 'reader' && <TabsTrigger value="overview" className="soulseer-tabs-trigger">Overview</TabsTrigger>}
@@ -161,6 +247,7 @@ export default function DashboardPage() {
                 <CalendarClock className="mx-auto h-12 w-12 mb-3"/>
                 No sessions recorded yet.
                 {userRole === 'client' && <Link href="/readers" className="block mt-2 text-[hsl(var(--primary))] hover:underline">Find a Reader to start a session.</Link>}
+                 {userRole === 'reader' && pendingSessions.length === 0 && <p className="mt-2">No new session requests.</p>}
               </div>
             </TabsContent>
 
@@ -179,3 +266,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

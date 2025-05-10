@@ -24,7 +24,6 @@ export interface Reader {
   dataAiHint?: string;
   email?: string; 
   role?: 'reader'; 
-  // sessionType?: 'video' | 'audio' | 'chat'; // Reader preferred session type - removing as client chooses
 }
 
 interface ReaderCardProps {
@@ -62,8 +61,10 @@ export function ReaderCard({ reader }: ReaderCardProps) {
         sessionId,
         readerUid: reader.id,
         readerName: reader.name,
+        readerPhotoURL: reader.imageUrl, // Pass reader photo
         clientUid: currentUser.uid,
         clientName: currentUser.name || 'Client',
+        clientPhotoURL: currentUser.photoURL || null, // Pass client photo
         status: 'pending', 
         requestedAt: serverTimestamp(),
         sessionType: sessionType, 
