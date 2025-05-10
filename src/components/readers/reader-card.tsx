@@ -1,29 +1,30 @@
-'use client'; // Added "use client" directive
+
+'use client'; 
 
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Star, Zap } from 'lucide-react';
+import { Star, Zap, Video, Mic, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { v4 as uuidv4 } from 'uuid'; // For generating unique session IDs
+import { v4 as uuidv4 } from 'uuid'; 
 
 export interface Reader {
-  id: string; // This is the reader's UID
+  id: string; 
   name: string;
-  specialties: string; // Comma-separated or array
+  specialties: string | string[]; 
   rating: number;
   imageUrl: string;
   status?: 'online' | 'offline' | 'busy';
   shortBio?: string;
   dataAiHint?: string;
-  email?: string; // Added email for completeness, though not directly used in card display
-  role?: 'reader'; // Added role
-  sessionType?: 'video' | 'audio' | 'chat'; // Reader preferred session type
+  email?: string; 
+  role?: 'reader'; 
+  // sessionType?: 'video' | 'audio' | 'chat'; // Reader preferred session type - removing as client chooses
 }
 
 interface ReaderCardProps {
@@ -31,12 +32,15 @@ interface ReaderCardProps {
 }
 
 export function ReaderCard({ reader }: ReaderCardProps) {
-  const specialtiesArray = typeof reader.specialties === 'string' ? reader.specialties.split(',').map(s => s.trim()) : reader.specialties;
+  const specialtiesArray = typeof reader.specialties === 'string' 
+    ? reader.specialties.split(',').map(s => s.trim()) 
+    : Array.isArray(reader.specialties) ? reader.specialties.map(s => s.trim()) : [];
+
   const { currentUser } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleRequestSession = async (sessionType: 'video' | 'audio' | 'chat' = 'video') => {
+  const handleRequestSession = async (sessionType: 'video' | 'audio' | 'chat') => {
     if (!currentUser) {
       toast({ variant: 'destructive', title: 'Login Required', description: 'Please log in to request a session.' });
       router.push('/login');
@@ -62,7 +66,7 @@ export function ReaderCard({ reader }: ReaderCardProps) {
         clientName: currentUser.name || 'Client',
         status: 'pending', 
         requestedAt: serverTimestamp(),
-        sessionType: sessionType, // Store the requested session type
+        sessionType: sessionType, 
       });
       
       toast({ title: 'Session Requested', description: `Connecting you for a ${sessionType} session with ${reader.name}...` });
@@ -97,6 +101,8 @@ export function ReaderCard({ reader }: ReaderCardProps) {
         return null;
     }
   };
+  
+  const canRequestSession = reader.status === 'online' && currentUser && currentUser.uid !== reader.id;
 
   return (
     <Card className="flex flex-col overflow-hidden bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)] shadow-lg hover:shadow-xl transition-shadow duration-300 h-full group">
@@ -111,58 +117,58 @@ export function ReaderCard({ reader }: ReaderCardProps) {
         />
         {getStatusIndicator()}
       </CardHeader>
-      <CardContent className="p-6 flex-grow">
-        <CardTitle className="text-3xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] mb-1">{reader.name}</CardTitle>
+      <CardContent className="p-4 sm:p-6 flex-grow">
+        <CardTitle className="text-2xl sm:text-3xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] mb-1">{reader.name}</CardTitle>
         <div className="flex items-center mb-3">
           {[...Array(Math.floor(reader.rating))].map((_, i) => (
-            <Star key={`full-${i}`} className="h-5 w-5 text-[hsl(var(--soulseer-gold))]" fill="hsl(var(--soulseer-gold))" />
+            <Star key={`full-${i}`} className="h-4 w-4 sm:h-5 sm:w-5 text-[hsl(var(--soulseer-gold))]" fill="hsl(var(--soulseer-gold))" />
           ))}
           {reader.rating % 1 !== 0 && (
-             <Star key="half" className="h-5 w-5 text-[hsl(var(--soulseer-gold))]" fill="url(#halfGradientReaderCard)" />
+             <Star key="half" className="h-4 w-4 sm:h-5 sm:w-5 text-[hsl(var(--soulseer-gold))]" fill="url(#halfGradientReaderCard)" />
           )}
           {[...Array(5 - Math.ceil(reader.rating))].map((_, i) => (
-            <Star key={`empty-${i}`} className="h-5 w-5 text-[hsl(var(--soulseer-gold))]" />
+            <Star key={`empty-${i}`} className="h-4 w-4 sm:h-5 sm:w-5 text-[hsl(var(--soulseer-gold))]" />
           ))}
-          <span className="ml-2 text-sm text-muted-foreground font-playfair-display">({reader.rating.toFixed(1)})</span>
+          <span className="ml-2 text-xs sm:text-sm text-muted-foreground font-playfair-display">({reader.rating.toFixed(1)})</span>
         </div>
-        <div className="mb-3 space-x-1">
+        <div className="mb-3 space-x-1 flex flex-wrap gap-1">
           {specialtiesArray.slice(0,3).map((spec, idx) => (
             <span key={idx} className="inline-block bg-[hsl(var(--primary)/0.2)] text-[hsl(var(--primary))] px-2 py-0.5 rounded-full text-xs font-playfair-display">
               {spec}
             </span>
           ))}
         </div>
-        {reader.shortBio && <CardDescription className="text-sm text-foreground/80 font-playfair-display line-clamp-3 mb-2">{reader.shortBio}</CardDescription>}
+        {reader.shortBio && <CardDescription className="text-xs sm:text-sm text-foreground/80 font-playfair-display line-clamp-3 mb-2">{reader.shortBio}</CardDescription>}
       </CardContent>
-      <CardFooter className="p-6 pt-0 flex flex-col gap-2">
-        <Button asChild variant="outline" className="w-full border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] font-playfair-display">
+      <CardFooter className="p-4 sm:p-6 pt-0 flex flex-col gap-2">
+        <Button asChild variant="outline" className="w-full border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] font-playfair-display text-sm">
           <Link href={`/readers/${reader.id}`}>View Profile</Link>
         </Button>
-        {/* Updated to allow selection of session type */}
-        <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2">
+        
+        <div className="w-full grid grid-cols-3 gap-1 sm:gap-2">
           <Button 
             onClick={() => handleRequestSession('video')}
-            disabled={reader.status !== 'online' || !currentUser || currentUser.uid === reader.id}
-            className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-50"
+            disabled={!canRequestSession}
+            className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-60 disabled:cursor-not-allowed text-xs sm:text-sm px-1 sm:px-2 py-1.5 sm:py-2 flex items-center justify-center gap-1"
             title="Request Video Session"
           >
-            Video
+            <Video className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Video</span>
           </Button>
           <Button 
             onClick={() => handleRequestSession('audio')}
-            disabled={reader.status !== 'online' || !currentUser || currentUser.uid === reader.id}
-            className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-50"
+            disabled={!canRequestSession}
+            className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-60 disabled:cursor-not-allowed text-xs sm:text-sm px-1 sm:px-2 py-1.5 sm:py-2 flex items-center justify-center gap-1"
             title="Request Audio Session"
           >
-            Audio
+            <Mic className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Audio</span>
           </Button>
           <Button 
             onClick={() => handleRequestSession('chat')}
-            disabled={reader.status !== 'online' || !currentUser || currentUser.uid === reader.id}
-            className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-50"
+            disabled={!canRequestSession}
+            className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display disabled:opacity-60 disabled:cursor-not-allowed text-xs sm:text-sm px-1 sm:px-2 py-1.5 sm:py-2 flex items-center justify-center gap-1"
             title="Request Chat Session"
           >
-            Chat
+            <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Chat</span>
           </Button>
         </div>
       </CardFooter>
@@ -177,3 +183,4 @@ export function ReaderCard({ reader }: ReaderCardProps) {
     </Card>
   );
 }
+

@@ -17,7 +17,7 @@ body {
     --popover: 260 50% 10%; /* Dark popover */
     --popover-foreground: 300 30% 95%;
 
-    --primary: 330 90% 65%; /* Vibrant Mystical Pink */
+    --primary: 330 90% 65%; /* Vibrant Mystical Pink (Red/Peach Pink variant) */
     --primary-foreground: 330 30% 98%; /* Very light pink/white for contrast on primary */
 
     --secondary: 270 50% 30%; /* Muted Purple */
@@ -38,9 +38,9 @@ body {
 
     --radius: 0.75rem; /* Slightly more rounded */
 
-    /* Specific SoulSeer colors from image */
-    --soulseer-logo-pink: 330 90% 65%; /* For "SoulSeer" logo text if not an image */
-    --soulseer-header-pink: 330 90% 65%; /* For Alex Brush headers (same as primary) */
+    /* Specific SoulSeer colors */
+    --soulseer-logo-pink: 330 90% 65%; /* For "SoulSeer" logo text */
+    --soulseer-header-pink: 330 90% 65%; /* Alex Brush headers - Red/Peach Pink */
     --soulseer-gold: 50 100% 65%; /* Same as accent */
     --soulseer-magenta-glow: 320 100% 55%; /* For glowing effects if needed */
 
@@ -98,29 +98,25 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: hsla(var(--background), 0.75); 
+    background-color: hsla(var(--background), 0.75); /* Increased opacity for darker overlay */
     z-index: -10; 
   }
   
    main, header, footer {
     position: relative;
-    z-index: 1;
+    z-index: 1; /* Ensure content is above the ::before pseudo-element */
   }
 
-  h1, h2, h3, h4, h5, h6, .page-title-text { 
+  h1, h2, h3, h4, h5, h6, .page-title-text, .main-header-text { 
     font-family: var(--font-alex-brush), cursive;
     color: hsl(var(--soulseer-header-pink));
+    /* White halo glow effect */
+    text-shadow: 
+      0 0 3px hsl(var(--foreground) / 0.7), 
+      0 0 6px hsl(var(--foreground) / 0.5),
+      0 0 9px hsl(var(--foreground) / 0.3);
   }
   
-  .main-header-text {
-    font-family: var(--font-alex-brush), cursive;
-    color: hsl(var(--soulseer-header-pink));
-  }
-
-  p, span, div, li, label, button, input, textarea, select, a {
-    font-family: var(--font-playfair-display), serif;
-  }
-
   .soulseer-tagline {
     font-family: var(--font-playfair-display), serif;
     font-size: 1.125rem; /* Adjusted for slightly better mobile */
@@ -177,7 +173,7 @@ html {
    @media (min-width: 768px) { /* md breakpoint */
     font-size: 2.5rem; /* 40px */
   }
-  color: hsl(var(--primary));
+  color: hsl(var(--primary)); /* Will inherit halo from h1-h6 styles */
   margin-bottom: 1rem; /* Adjusted for mobile */
    @media (min-width: 768px) { /* md breakpoint */
      margin-bottom: 1.5rem; /* 24px */
