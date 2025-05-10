@@ -1,4 +1,3 @@
-
 'use client';
 
 import 'webrtc-adapter'; // Import for side-effects (browser shimming)
@@ -11,7 +10,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { webrtcServersConfig } from '@/lib/webrtc/config';
 import { getMediaPermissions, toggleMuteMedia, toggleVideoMedia, stopMediaStream } from '@/lib/webrtc/mediaHandler';
-import { setupDataChannelEventsHandler, sendChatMessageViaDataChannel } from '@/lib/webrtc/dataChannelHandler';
+import { setupDataChannelEventsHandler } from '@/lib/webrtc/dataChannelHandler'; // Removed sendChatMessageViaDataChannel as it's part of ChatInterface now
 
 import { VideoFeed } from '@/components/session/VideoFeed';
 import { ChatInterface } from '@/components/session/ChatInterface';
@@ -22,7 +21,6 @@ import type { AppUser } from '@/types/user';
 import type { VideoSessionData, ChatMessage, CallRole, CallStatus, OpponentInfo } from '@/types/session';
 
 const BILLING_INTERVAL_MS = 60000; // 1 minute for actual billing
-// const BILLING_INTERVAL_MS = 10000; // 10 seconds for testing
 
 const VideoCallPage: NextPage = () => {
   const params = useParams();
@@ -47,26 +45,30 @@ const VideoCallPage: NextPage = () => {
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [sessionTimer, setSessionTimer] = useState(0);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const billingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [currentAmountCharged, setCurrentAmountCharged] = useState(0);
   const [clientBalance, setClientBalance] = useState<number | undefined>(currentUser?.balance);
 
   // Refs for state values needed in async/callback contexts to avoid stale closures
-  const callRoleRef = useRef(callRole);
-  const sessionDataRef = useRef(sessionData);
-  const clientBalanceRef = useRef(clientBalance);
-  const opponentRef = useRef(opponent);
-  const callStatusRef = useRef(callStatus);
-  const currentAmountChargedRef = useRef(currentAmountCharged);
-  const isHangingUpRef = useRef(false); // Prevents multiple hangup executions
+  const stateRefs = useRef({
+    callRole,
+    sessionData,
+    clientBalance,
+    opponent,
+    callStatus,
+    currentAmountCharged,
+    isHangingUp: false,
+    sessionId,
+    currentUser,
+    chatMessages,
+  });
 
-  useEffect(() => { callRoleRef.current = callRole; }, [callRole]);
-  useEffect(() => { sessionDataRef.current = sessionData; }, [sessionData]);
-  useEffect(() => { clientBalanceRef.current = clientBalance; }, [clientBalance]);
-  useEffect(() => { opponentRef.current = opponent; }, [opponent]);
-  useEffect(() => { callStatusRef.current = callStatus; }, [callStatus]);
-  useEffect(() => { currentAmountChargedRef.current = currentAmountCharged; }, [currentAmountCharged]);
+  useEffect(() => {
+    stateRefs.current = {
+      callRole, sessionData, clientBalance, opponent, callStatus, currentAmountCharged, 
+      isHangingUp: stateRefs.current.isHangingUp, // Preserve isHangingUp
+      sessionId, currentUser, chatMessages,
+    };
+  }, [callRole, sessionData, clientBalance, opponent, callStatus, currentAmountCharged, sessionId, currentUser, chatMessages]);
 
 
   const determinedSessionType = sessionData?.sessionType || 'chat'; 
@@ -81,32 +83,31 @@ const VideoCallPage: NextPage = () => {
 
   // Effect to load session data and determine role
   useEffect(() => {
-    if (!currentUser || !sessionId) return;
+    if (!stateRefs.current.currentUser || !stateRefs.current.sessionId) return;
     setCallStatus('loading_session');
-    const sessionDocRef = doc(db, 'videoSessions', sessionId);
+    const sessionDocRef = doc(db, 'videoSessions', stateRefs.current.sessionId);
 
     const unsubscribe = onSnapshot(sessionDocRef, async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as VideoSessionData;
-        setSessionData(data); // Update local state first
+        setSessionData(data);
         setCurrentAmountCharged(data.amountCharged || 0);
 
         if (data.status === 'cancelled' || data.status === 'ended' || data.status === 'ended_insufficient_funds') {
-            if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error') { 
+            if (stateRefs.current.callStatus !== 'ended' && stateRefs.current.callStatus !== 'error') { 
               toast({ title: 'Session Over', description: `This session has been ${data.status}. Redirecting to dashboard.`});
               router.push('/dashboard');
             }
             return;
         }
         
-
         let determinedRole: CallRole = 'unknown';
         let opponentUid: string | null = null;
 
-        if (currentUser.uid === data.readerUid) {
+        if (stateRefs.current.currentUser?.uid === data.readerUid) {
           determinedRole = 'caller'; 
           opponentUid = data.clientUid;
-        } else if (currentUser.uid === data.clientUid) {
+        } else if (stateRefs.current.currentUser?.uid === data.clientUid) {
           determinedRole = 'callee'; 
           opponentUid = data.readerUid;
         } else {
@@ -117,7 +118,7 @@ const VideoCallPage: NextPage = () => {
         }
         setCallRole(determinedRole);
         
-        if (opponentUid && (!opponentRef.current || opponentRef.current.uid !== opponentUid)) {
+        if (opponentUid && (!stateRefs.current.opponent || stateRefs.current.opponent.uid !== opponentUid)) {
           const userDoc = await getDoc(doc(db, 'users', opponentUid));
           if (userDoc.exists()) {
             const opponentData = userDoc.data() as AppUser;
@@ -127,8 +128,7 @@ const VideoCallPage: NextPage = () => {
           }
         }
         
-        // Transition to waiting for permissions if session is loaded and role determined
-        if (callStatusRef.current === 'loading_session' || callStatusRef.current === 'idle') {
+        if (stateRefs.current.callStatus === 'loading_session' || stateRefs.current.callStatus === 'idle') {
              if(data.status === 'pending' && determinedRole === 'caller') {
                 setCallStatus('waiting_permission');
              } else if (data.status === 'pending' && determinedRole === 'callee'){
@@ -146,28 +146,26 @@ const VideoCallPage: NextPage = () => {
       }
     });
     return () => unsubscribe();
-  }, [currentUser, sessionId, router, toast]);
-
+  }, [router, toast]); // Dependencies: currentUser and sessionId are now via stateRefs within the effect
 
   useEffect(() => {
-    if (sessionDataRef.current) {
-      const type = sessionDataRef.current.sessionType;
-      if (type === 'audio') {
-         setIsVideoOff(true); 
-      } else if (type === 'chat') {
+    if (stateRefs.current.sessionData) {
+      const type = stateRefs.current.sessionData.sessionType;
+      if (type === 'audio') setIsVideoOff(true); 
+      else if (type === 'chat') {
         setIsVideoOff(true); 
         setIsMuted(true); 
       }
     }
-  }, []); // Run once on initial sessionData load
+  }, [sessionData?.sessionType]); // Depend on specific part of sessionData
 
   // Effect for media permissions
   useEffect(() => {
-    if (callStatusRef.current !== 'waiting_permission' || callRoleRef.current === 'unknown' || !sessionDataRef.current) return;
+    if (stateRefs.current.callStatus !== 'waiting_permission' || stateRefs.current.callRole === 'unknown' || !stateRefs.current.sessionData) return;
 
     const requestPermissions = async () => {
       const { stream, status } = await getMediaPermissions(
-        sessionDataRef.current!.sessionType, 
+        stateRefs.current.sessionData!.sessionType, 
         localVideoRef, 
         isMuted, 
         isVideoOff, 
@@ -185,12 +183,12 @@ const VideoCallPage: NextPage = () => {
       }
     };
     requestPermissions();
-  }, [callStatus, isMuted, isVideoOff, toast]);
+  }, [callStatus, isMuted, isVideoOff, toast]); // isMuted, isVideoOff are direct state dependencies
 
 
   // Effect for WebRTC connection setup and signaling
   useEffect(() => {
-    if (!currentUser || !sessionId || callRoleRef.current === 'unknown' || callStatusRef.current !== 'permission_granted' || !sessionDataRef.current) {
+    if (!stateRefs.current.currentUser || !stateRefs.current.sessionId || stateRefs.current.callRole === 'unknown' || stateRefs.current.callStatus !== 'permission_granted' || !stateRefs.current.sessionData) {
       return;
     }
 
@@ -231,24 +229,24 @@ const VideoCallPage: NextPage = () => {
       switch (pc.connectionState) {
         case 'connected':
           setCallStatus('connected');
-          if (sessionDataRef.current && (sessionDataRef.current.status !== 'active' || !sessionDataRef.current.startedAt)) {
-            const rate = sessionDataRef.current.readerRatePerMinute || 0;
-            const currentClientBalance = clientBalanceRef.current; // Use ref
+          if (stateRefs.current.sessionData && (stateRefs.current.sessionData.status !== 'active' || !stateRefs.current.sessionData.startedAt)) {
+            const rate = stateRefs.current.sessionData.readerRatePerMinute || 0;
+            const currentClientBalance = stateRefs.current.clientBalance;
 
-            if (callRoleRef.current === 'callee' && typeof currentClientBalance === 'number' && currentClientBalance < rate && rate > 0) {
+            if (stateRefs.current.callRole === 'callee' && typeof currentClientBalance === 'number' && currentClientBalance < rate && rate > 0) {
                 toast({ variant: 'destructive', title: 'Insufficient Funds', description: 'Your balance is too low to start this session.' });
-                await handleHangUp(false, 'ended_insufficient_funds');
+                // Use the callback version of handleHangUp to ensure fresh stateRefs are used if needed
+                handleHangUp(false, 'ended_insufficient_funds');
                 return;
             }
-            const sessionDocRef = doc(db, 'videoSessions', sessionId);
-            // Update only if not already active (idempotency for reconnects)
+            const sessionDocRef = doc(db, 'videoSessions', stateRefs.current.sessionId);
             const currentSessionSnap = await getDoc(sessionDocRef);
             if (currentSessionSnap.exists() && currentSessionSnap.data().status !== 'active') {
                  await updateDoc(sessionDocRef, { status: 'active', startedAt: serverTimestamp() });
             }
           }
-          toast({title: "Connection Established", description: `Connected with ${opponentRef.current?.name || 'participant'}.`, variant: "default"});
-          if (callRoleRef.current === 'caller' && !dataChannelRef.current && peerConnectionRef.current) {
+          toast({title: "Connection Established", description: `Connected with ${stateRefs.current.opponent?.name || 'participant'}.`, variant: "default"});
+          if (stateRefs.current.callRole === 'caller' && !dataChannelRef.current && peerConnectionRef.current) {
              const dc = peerConnectionRef.current.createDataChannel('chat', {reliable: true});
              dataChannelRef.current = setupDataChannelEventsHandler(dc, setChatMessages, toast);
           }
@@ -260,10 +258,10 @@ const VideoCallPage: NextPage = () => {
         case 'failed': 
           setCallStatus('error'); 
           toast({title: "Connection Failed", description: "Could not establish connection.", variant: "destructive"}); 
-          await handleHangUp(false, 'ended'); 
+          handleHangUp(false, 'ended'); 
           break;
         case 'closed': 
-          if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error' && !isHangingUpRef.current) {
+          if (stateRefs.current.callStatus !== 'ended' && stateRefs.current.callStatus !== 'error' && !stateRefs.current.isHangingUp) {
             console.log("Peer connection closed unexpectedly.");
             setCallStatus('disconnected'); 
           }
@@ -273,14 +271,14 @@ const VideoCallPage: NextPage = () => {
       }
     };
 
-    const roomRef = doc(db, 'webrtcRooms', sessionId);
+    const roomRef = doc(db, 'webrtcRooms', stateRefs.current.sessionId);
     const callerCandidatesCollection = collection(roomRef, 'callerCandidates');
     const calleeCandidatesCollection = collection(roomRef, 'calleeCandidates');
     let iceCandidateListenersUnsub: Unsubscribe[] = [];
 
     pc.onicecandidate = event => {
       if (event.candidate) {
-        const candidatesCollection = callRoleRef.current === 'caller' ? callerCandidatesCollection : calleeCandidatesCollection;
+        const candidatesCollection = stateRefs.current.callRole === 'caller' ? callerCandidatesCollection : calleeCandidatesCollection;
         addDoc(candidatesCollection, event.candidate.toJSON()).catch(e => console.error("Error adding ICE candidate: ", e));
       }
     };
@@ -291,9 +289,9 @@ const VideoCallPage: NextPage = () => {
       try {
         const roomSnapshot = await getDoc(roomRef);
 
-        if (callRoleRef.current === 'caller') { 
-          if (!roomSnapshot.exists()) { 
-            await setDoc(roomRef, { createdAt: serverTimestamp(), creatorUid: currentUser.uid, sessionId: sessionId });
+        if (stateRefs.current.callRole === 'caller') { 
+          if (!roomSnapshot.exists() && stateRefs.current.currentUser) { 
+            await setDoc(roomRef, { createdAt: serverTimestamp(), creatorUid: stateRefs.current.currentUser.uid, sessionId: stateRefs.current.sessionId });
           }
           
           if (!dataChannelRef.current && peerConnectionRef.current) {
@@ -319,7 +317,7 @@ const VideoCallPage: NextPage = () => {
             });
           }));
 
-        } else if (callRoleRef.current === 'callee') { 
+        } else if (stateRefs.current.callRole === 'callee') { 
           const handleOffer = async (offerData: RTCSessionDescriptionInit) => {
             if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') {
                 console.warn("Cannot set remote offer in current signaling state:", pc.signalingState);
@@ -369,16 +367,16 @@ const VideoCallPage: NextPage = () => {
         dataChannelRef.current = null;
       }
     };
-  }, [currentUser, sessionId, isMediaSession, toast]); // Added toast, removed refs from deps
+  }, [callStatus, isMediaSession, toast]); // Only direct state dependencies needed here if others are through refs
 
 
   // Session Timer Effect
   useEffect(() => {
-    if (callStatusRef.current === 'connected' && sessionDataRef.current?.status === 'active' && sessionDataRef.current?.startedAt) {
+    if (stateRefs.current.callStatus === 'connected' && stateRefs.current.sessionData?.status === 'active' && stateRefs.current.sessionData?.startedAt) {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       const updateTimer = () => {
         const now = Timestamp.now();
-        const startedAtSeconds = sessionDataRef.current?.startedAt?.seconds || now.seconds;
+        const startedAtSeconds = stateRefs.current.sessionData?.startedAt?.seconds || now.seconds;
         const elapsed = now.seconds - startedAtSeconds;
         setSessionTimer(elapsed > 0 ? elapsed : 0);
       };
@@ -386,10 +384,10 @@ const VideoCallPage: NextPage = () => {
       timerIntervalRef.current = setInterval(updateTimer, 1000);
     } else {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (sessionDataRef.current?.status !== 'active' && sessionDataRef.current?.status !== 'pending' && sessionDataRef.current?.startedAt && sessionDataRef.current?.endedAt) {
-        const elapsed = sessionDataRef.current.endedAt.seconds - sessionDataRef.current.startedAt.seconds;
+      if (stateRefs.current.sessionData?.status !== 'active' && stateRefs.current.sessionData?.status !== 'pending' && stateRefs.current.sessionData?.startedAt && stateRefs.current.sessionData?.endedAt) {
+        const elapsed = stateRefs.current.sessionData.endedAt.seconds - stateRefs.current.sessionData.startedAt.seconds;
         setSessionTimer(elapsed > 0 ? elapsed : 0);
-      } else if (callStatusRef.current !== 'connected' && callStatusRef.current !== 'connecting') {
+      } else if (stateRefs.current.callStatus !== 'connected' && stateRefs.current.callStatus !== 'connecting') {
          setSessionTimer(0);
       }
     }
@@ -398,30 +396,37 @@ const VideoCallPage: NextPage = () => {
 
   // Billing Timer Effect
   useEffect(() => {
-    if (callStatusRef.current === 'connected' && sessionDataRef.current?.status === 'active' && callRoleRef.current === 'callee' && currentUser && sessionDataRef.current.readerRatePerMinute && typeof clientBalanceRef.current === 'number') {
+    if (stateRefs.current.callStatus === 'connected' && 
+        stateRefs.current.sessionData?.status === 'active' && 
+        stateRefs.current.callRole === 'callee' && 
+        stateRefs.current.currentUser && 
+        stateRefs.current.sessionData.readerRatePerMinute && 
+        typeof stateRefs.current.clientBalance === 'number') {
+        
         if (billingIntervalRef.current) clearInterval(billingIntervalRef.current);
 
         const performBilling = async () => {
-            if (!sessionDataRef.current || !currentUser) return; // Guard clause
-            const ratePerMinute = sessionDataRef.current.readerRatePerMinute || 0;
+            const { sessionData: currentSessionData, currentUser: currentCUser, clientBalance: currentCliBalance, currentAmountCharged: currentAmtCharged, sessionId: currentSessionId } = stateRefs.current;
+
+            if (!currentSessionData || !currentCUser) return; 
+            const ratePerMinute = currentSessionData.readerRatePerMinute || 0;
             if (ratePerMinute <= 0) return;
 
             const costForThisMinute = ratePerMinute;
-            const currentBalance = clientBalanceRef.current; 
-
-            if (typeof currentBalance !== 'number' || currentBalance < costForThisMinute) {
+            
+            if (typeof currentCliBalance !== 'number' || currentCliBalance < costForThisMinute) {
                 toast({ variant: 'destructive', title: 'Insufficient Funds', description: 'Session ending due to low balance.' });
-                await handleHangUp(false, 'ended_insufficient_funds');
+                handleHangUp(false, 'ended_insufficient_funds');
                 return;
             }
 
-            const newBalance = currentBalance - costForThisMinute;
-            await updateUserBalance(currentUser.uid, newBalance); 
+            const newBalance = currentCliBalance - costForThisMinute;
+            await updateUserBalance(currentCUser.uid, newBalance); 
             
-            const newTotalCharged = (currentAmountChargedRef.current || 0) + costForThisMinute;
+            const newTotalCharged = (currentAmtCharged || 0) + costForThisMinute;
             setCurrentAmountCharged(newTotalCharged); 
             
-            const sessionDocRef = doc(db, 'videoSessions', sessionId);
+            const sessionDocRef = doc(db, 'videoSessions', currentSessionId);
             await updateDoc(sessionDocRef, { amountCharged: newTotalCharged });
 
             toast({ title: 'Billed', description: `$${costForThisMinute.toFixed(2)} charged for the current minute.`});
@@ -438,14 +443,15 @@ const VideoCallPage: NextPage = () => {
     }
 
     return () => { if (billingIntervalRef.current) clearInterval(billingIntervalRef.current); };
-  }, [callStatus, currentUser, sessionId, updateUserBalance, toast]);
+  }, [callStatus, updateUserBalance, toast]);
 
 
   const handleHangUp = useCallback(async (isPageUnload = false, reason: VideoSessionData['status'] = 'ended') => {
-    if (isHangingUpRef.current) return; // Prevent multiple executions
-    isHangingUpRef.current = true;
+    const currentRefs = stateRefs.current; // Capture current refs at the time of call
+    if (currentRefs.isHangingUp) return;
+    stateRefs.current.isHangingUp = true; // Mutate the ref directly
     
-    const previousCallStatus = callStatusRef.current;
+    const previousCallStatus = currentRefs.callStatus;
     setCallStatus(reason === 'ended_insufficient_funds' ? 'error' : 'ended'); 
 
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -461,8 +467,8 @@ const VideoCallPage: NextPage = () => {
     peerConnectionRef.current?.close(); 
     peerConnectionRef.current = null;
 
-    if (sessionId && currentUser) {
-      const videoSessionDocRef = doc(db, 'videoSessions', sessionId);
+    if (currentRefs.sessionId && currentRefs.currentUser) {
+      const videoSessionDocRef = doc(db, 'videoSessions', currentRefs.sessionId);
       try {
         await runTransaction(db, async (transaction) => {
             const currentSessionSnap = await transaction.get(videoSessionDocRef);
@@ -470,77 +476,64 @@ const VideoCallPage: NextPage = () => {
                 console.warn("Session document does not exist for hangup processing.");
                 return;
             }
-            const currentSession = currentSessionSnap.data() as VideoSessionData;
+            const currentDbSessionData = currentSessionSnap.data() as VideoSessionData;
             
-            if(currentSession.status === 'ended' || currentSession.status === 'cancelled' || currentSession.status === 'ended_insufficient_funds') {
-                 console.log("Session already ended, no further updates needed for hangup:", currentSession.status);
-                 // Update local state if it wasn't already matching
-                 setSessionData(currentSession);
-                 if(sessionTimer === 0 && currentSession.startedAt && currentSession.endedAt) {
-                    const finalDuration = currentSession.endedAt.seconds - currentSession.startedAt.seconds;
+            if(currentDbSessionData.status === 'ended' || currentDbSessionData.status === 'cancelled' || currentDbSessionData.status === 'ended_insufficient_funds') {
+                 console.log("Session already ended, no further updates needed for hangup:", currentDbSessionData.status);
+                 setSessionData(currentDbSessionData); // Sync local state
+                 if(sessionTimer === 0 && currentDbSessionData.startedAt && currentDbSessionData.endedAt) {
+                    const finalDuration = currentDbSessionData.endedAt.seconds - currentDbSessionData.startedAt.seconds;
                     setSessionTimer(finalDuration > 0 ? finalDuration : 0);
                  }
-                 return; // Avoid re-processing if already in a final state
+                 return;
             }
 
             const endTime = Timestamp.now();
-            let totalMinutesCalculated = currentSession.totalMinutes || 0;
-            let finalAmountCharged = currentAmountChargedRef.current;
+            let totalMinutesCalculated = currentDbSessionData.totalMinutes || 0;
+            let finalAmountCharged = currentRefs.currentAmountCharged; // Use amount charged from state ref
 
-            if (currentSession.startedAt) {
-                const durationSeconds = endTime.seconds - currentSession.startedAt.seconds;
-                // If timer was running, use its value for more accurate duration in seconds before rounding up for minutes
-                // Otherwise, calculate from Firestore timestamps
+            if (currentDbSessionData.startedAt) {
+                const durationSeconds = endTime.seconds - currentDbSessionData.startedAt.seconds;
                 const effectiveDurationSeconds = (previousCallStatus === 'connected' && sessionTimer > 0) ? sessionTimer : durationSeconds;
-                
                 totalMinutesCalculated = Math.ceil(effectiveDurationSeconds / 60); 
                 
                 if (sessionTimer === 0 && previousCallStatus !== 'connected' && durationSeconds > 0) { 
                     setSessionTimer(durationSeconds);
                 }
-                // Ensure billing for at least one minute if session was active and rate applies
-                if (previousCallStatus === 'connected' && totalMinutesCalculated === 0 && currentSession.readerRatePerMinute && currentSession.readerRatePerMinute > 0) {
+                if (previousCallStatus === 'connected' && totalMinutesCalculated === 0 && currentDbSessionData.readerRatePerMinute && currentDbSessionData.readerRatePerMinute > 0) {
                     totalMinutesCalculated = 1;
                 }
-                 // If billing interval didn't run for the last partial minute but connection existed.
-                if (previousCallStatus === 'connected' && totalMinutesCalculated > 0 && finalAmountCharged < totalMinutesCalculated * (currentSession.readerRatePerMinute || 0) && currentSession.readerRatePerMinute) {
-                   // This scenario needs careful handling based on exact billing rules (e.g. charge for partial minute on hangup)
-                   // For simplicity, we'll assume the currentAmountCharged from intervals is the source of truth,
-                   // or if it's zero but minutes are >0, charge for 1 minute minimum if rate exists
-                   if(finalAmountCharged === 0 && totalMinutesCalculated > 0 && currentSession.readerRatePerMinute > 0){
-                       finalAmountCharged = currentSession.readerRatePerMinute;
-                   }
+                if(finalAmountCharged === 0 && totalMinutesCalculated > 0 && currentDbSessionData.readerRatePerMinute && currentDbSessionData.readerRatePerMinute > 0){
+                   finalAmountCharged = currentDbSessionData.readerRatePerMinute * totalMinutesCalculated; // Bill for all calculated minutes if not already done
                 }
-
-            } else if (reason !== 'cancelled' && reason !== 'pending') { // If no start time, but session was attempted and not just cancelled pre-start
-                totalMinutesCalculated = 0; // Or some minimum if applicable
+            } else if (reason !== 'cancelled' && reason !== 'pending') {
+                totalMinutesCalculated = 0;
             }
             
-            transaction.update(videoSessionDocRef, { 
+            const updatePayload: Partial<VideoSessionData> = { 
                 status: reason, 
                 endedAt: endTime, 
                 totalMinutes: totalMinutesCalculated,
                 amountCharged: finalAmountCharged,
-            });
-            // Update local sessionData to reflect the final state immediately after transaction attempt
-            setSessionData(prev => prev ? ({...prev, status: reason, endedAt: endTime, totalMinutes: totalMinutesCalculated, amountCharged: finalAmountCharged}) : null);
+            };
+            transaction.update(videoSessionDocRef, updatePayload);
+            setSessionData(prev => prev ? ({...prev, ...updatePayload } as VideoSessionData) : null);
         });
 
       } catch (error) {
           console.error("Transaction failed for hangup:", error);
-          // Fallback to a simple update if transaction fails
           try {
             const currentSessionSnapFallback = await getDoc(videoSessionDocRef);
             if (currentSessionSnapFallback.exists() && currentSessionSnapFallback.data().status !== 'ended' && currentSessionSnapFallback.data().status !== 'ended_insufficient_funds') {
                  const endTime = Timestamp.now();
-                 let totalMinutesCalculated = sessionDataRef.current?.totalMinutes || 0;
-                 if(sessionDataRef.current?.startedAt) totalMinutesCalculated = Math.ceil((endTime.seconds - sessionDataRef.current.startedAt.seconds) / 60);
+                 let totalMinutesCalculated = currentRefs.sessionData?.totalMinutes || 0;
+                 if(currentRefs.sessionData?.startedAt) totalMinutesCalculated = Math.ceil((endTime.seconds - currentRefs.sessionData.startedAt.seconds) / 60);
                  
                  await updateDoc(videoSessionDocRef, { 
                     status: reason, 
                     endedAt: endTime, 
                     totalMinutes: totalMinutesCalculated,
-                    amountCharged: currentAmountChargedRef.current,
+                    amountCharged: currentRefs.currentAmountCharged,
                 });
             }
           } catch (updateError) {
@@ -548,8 +541,8 @@ const VideoCallPage: NextPage = () => {
           }
       }
       
-      if (callRoleRef.current === 'caller') { 
-        const roomDocRef = doc(db, 'webrtcRooms', sessionId);
+      if (currentRefs.callRole === 'caller') { 
+        const roomDocRef = doc(db, 'webrtcRooms', currentRefs.sessionId);
         try {
           const batch = writeBatch(db);
           const subcollections = ['callerCandidates', 'calleeCandidates'];
@@ -564,39 +557,34 @@ const VideoCallPage: NextPage = () => {
       }
 
       if (!isPageUnload) {
-        const finalReason = sessionDataRef.current?.status || reason; // Use updated sessionData status if available
+        const finalReason = stateRefs.current.sessionData?.status || reason;
         toast({ title: finalReason === 'ended_insufficient_funds' ? 'Session Ended: Low Balance' : 'Session Ended' });
         router.push('/dashboard'); 
       }
     } else if (!isPageUnload) {
          router.push('/'); 
     }
-    // isHangingUpRef.current = false; // Reset after operations, or ensure it's reset if user stays on page post-error
-  }, [sessionId, currentUser, router, toast, sessionTimer, updateUserBalance]); // Added sessionTimer and updateUserBalance for accurate calculations
+     // Reset isHangingUp after operations are complete or if an error occurs that halts further processing
+     // Consider placing this in a finally block if the async operations were wrapped in try/catch/finally.
+     // For now, setting it here means it's reset once the primary path completes.
+     // If an early return due to error, ensure it's reset or handled.
+     // This line may need to be moved depending on how errors are handled to ensure it always resets.
+     // For now, this will reset after the main execution path.
+     // stateRefs.current.isHangingUp = false; // Re-enable hangup if needed, or manage more carefully
+  }, [router, toast, sessionTimer, updateUserBalance]); // sessionTimer, updateUserBalance are direct stateful deps
 
   // Cleanup on unmount or page navigation
   useEffect(() => {
     const cleanup = (isUnloading = false) => { 
-      if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error' && !isHangingUpRef.current) {
+      if (stateRefs.current.callStatus !== 'ended' && stateRefs.current.callStatus !== 'error' && !stateRefs.current.isHangingUp) {
          handleHangUp(isUnloading);
       }
     };
     
     window.addEventListener('beforeunload', () => cleanup(true));
     
-    const handleRouteChange = () => {
-        if (peerConnectionRef.current || localStreamRef.current || dataChannelRef.current) {
-            if (callStatusRef.current !== 'ended' && callStatusRef.current !== 'error' && !isHangingUpRef.current) {
-                handleHangUp(false); 
-            }
-        }
-    };
-    // Next.js router events are not directly available in App Router for `routeChangeStart`.
-    // Instead, useEffect's cleanup function on component unmount is the primary way for non-unload cleanup.
-    
     return () => {
       window.removeEventListener('beforeunload', () => cleanup(true));
-      // This cleanup runs when the component unmounts, e.g. due to route change.
       cleanup(false); 
     };
   }, [handleHangUp]);
@@ -679,4 +667,3 @@ const VideoCallPage: NextPage = () => {
 };
 
 export default VideoCallPage;
-
