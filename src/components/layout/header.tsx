@@ -3,10 +3,11 @@
 
 import Link from 'next/link';
 import Image from 'next/image'; // Added Image import
+import React from 'react'; // Added React import
 import { useRouter } from 'next/navigation'; 
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
-import { Menu, Home, Users, ShoppingCart, MessageCircle, Video, Info, HelpCircle, LogIn, UserPlus, UserCircle, LogOut, Settings, ShieldQuestion } from 'lucide-react'; 
+import { Menu, Home, Users, ShoppingCart, MessageCircle, Video, Info, HelpCircle, LogIn, UserPlus, UserCircle as UserIcon, LogOut, Settings, ShieldQuestion } from 'lucide-react'; 
 // import { CelestialIcon } from '@/components/icons/celestial-icon'; // Removed CelestialIcon as logo image is used
 import { useAuth } from '@/contexts/auth-context'; 
 
@@ -85,7 +86,7 @@ export function Header() {
             <>
               <Button variant="ghost" asChild className="text-foreground/80 hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)]">
                 <Link href="/profile" className="flex items-center gap-2 font-playfair-display text-sm">
-                  <UserCircle className="h-5 w-5" /> Profile
+                  <UserIcon className="h-5 w-5" /> Profile
                 </Link>
               </Button>
               <Button onClick={handleLogout} variant="outline" className="border-[hsl(var(--accent))] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.1)] hover:text-[hsl(var(--accent))] font-playfair-display text-sm">
@@ -139,7 +140,7 @@ export function Header() {
                   <>
                     <SheetClose asChild>
                       <Button variant="ghost" asChild className="w-full justify-start text-md text-foreground/90 hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] py-3">
-                        <Link href="/profile" className="flex items-center gap-3 font-playfair-display"><UserCircle className="h-5 w-5"/> Profile</Link>
+                        <Link href="/profile" className="flex items-center gap-3 font-playfair-display"><UserIcon className="h-5 w-5"/> Profile</Link>
                       </Button>
                     </SheetClose>
                     <Button onClick={handleLogout} variant="outline" className="w-full border-[hsl(var(--accent))] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.1)] text-md py-3">
@@ -168,3 +169,4 @@ export function Header() {
     </header>
   );
 }
+
