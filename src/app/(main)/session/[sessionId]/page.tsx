@@ -1,6 +1,7 @@
 // Updated src/app/(main)/session/[sessionId]/page.tsx
 'use client';
 
+import 'webrtc-adapter'; // Import for side-effects (browser shimming)
 import type { NextPage } from 'next';
 import { useParams, useRouter } from 'next/navigation';
 import React, { useEffect, useRef, useState, useCallback, FormEvent } from 'react';
@@ -18,11 +19,30 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import type { AppUser } from '@/types/user';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
+// Default ICE servers
+const defaultIceServers = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+
+let iceServersList = defaultIceServers;
+const iceServerConfigString = process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS;
+
+if (iceServerConfigString) {
+  try {
+    const parsedIceServers = JSON.parse(iceServerConfigString);
+    if (Array.isArray(parsedIceServers) && parsedIceServers.length > 0) {
+      iceServersList = parsedIceServers;
+    } else {
+      console.warn("NEXT_PUBLIC_WEBRTC_ICE_SERVERS is not a valid array or is empty. Using default STUN servers.");
+    }
+  } catch (e) {
+    console.error("Failed to parse NEXT_PUBLIC_WEBRTC_ICE_SERVERS. Using default STUN servers. Error:", e);
+  }
+}
+
 const servers = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ],
+  iceServers: iceServersList,
   iceCandidatePoolSize: 10,
 };
 
@@ -80,7 +100,7 @@ const VideoCallPage: NextPage = () => {
 
   const determinedSessionType = sessionData?.sessionType || 'video';
 
-  const isLoading = callStatus === 'idle' || callStatus === 'loading_session' || callStatus === 'waiting_permission' || callStatus === 'determining_role';
+  const isLoading = callStatus === 'idle' || callStatus === 'loading_session' || callStatus === 'waiting_permission'; // Removed 'determining_role' as it's part of loading_session
   const isMediaSession = determinedSessionType === 'video' || determinedSessionType === 'audio';
 
 
@@ -416,8 +436,7 @@ const VideoCallPage: NextPage = () => {
   const handleHangUp = useCallback(async () => {
     if (callStatus === 'disconnected' || callStatus === 'ended') return; 
 
-    const previousStatus = callStatus;
-    setCallStatus('ended'); // Use 'ended' for user-initiated hangup
+    setCallStatus('ended'); 
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     
     localStreamRef.current?.getTracks().forEach(track => track.stop());
@@ -442,7 +461,6 @@ const VideoCallPage: NextPage = () => {
         status: 'ended', 
         endedAt: serverTimestamp(),
         totalMinutes: totalMinutes,
-        // amountCharged: placeholder for Stripe logic
       });
 
       if (callRole === 'caller' && isMediaSession) { 
@@ -452,8 +470,8 @@ const VideoCallPage: NextPage = () => {
           const subcollections = ['callerCandidates', 'calleeCandidates', 'messages'];
           for (const subcoll of subcollections) {
             const q = query(collection(roomRef, subcoll));
-            const docs = await getDocs(q);
-            docs.forEach(docSnapshot => batch.delete(docSnapshot.ref));
+            const docsSnap = await getDocs(q);
+            docsSnap.forEach(docSnapshot => batch.delete(docSnapshot.ref));
           }
           batch.delete(roomRef);
           await batch.commit();
@@ -466,16 +484,14 @@ const VideoCallPage: NextPage = () => {
     router.push('/');
   }, [sessionId, currentUser, callRole, router, toast, callStatus, isMediaSession]);
 
-  // Cleanup on component unmount (e.g. browser back button)
   useEffect(() => {
     return () => {
       if (callStatus !== 'ended' && callStatus !== 'error' && callStatus !== 'idle' && callStatus !== 'loading_session') {
-        // If session is active/connecting and user navigates away, treat as hangup
         handleHangUp();
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callStatus]); // Only run if callStatus changes, to avoid calling hangup on every render. handleHangUp is memoized.
+  }, [callStatus]); 
 
 
   const toggleMute = () => {
@@ -489,7 +505,7 @@ const VideoCallPage: NextPage = () => {
   };
 
   const toggleVideo = () => {
-    if (determinedSessionType !== 'video') return; // Only for video sessions
+    if (determinedSessionType !== 'video') return; 
     if (localStreamRef.current && localStreamRef.current.getVideoTracks().length > 0) {
       const newVideoOffState = !isVideoOff;
       localStreamRef.current.getVideoTracks().forEach(track => {
@@ -497,9 +513,9 @@ const VideoCallPage: NextPage = () => {
       });
       setIsVideoOff(newVideoOffState);
       if (newVideoOffState && localVideoRef.current) {
-        localVideoRef.current.srcObject = null; // Clear video display
+        localVideoRef.current.srcObject = null; 
       } else if (!newVideoOffState && localVideoRef.current && localStreamRef.current) {
-        localVideoRef.current.srcObject = localStreamRef.current; // Restore video display
+        localVideoRef.current.srcObject = localStreamRef.current; 
       }
     }
   };
@@ -701,3 +717,4 @@ const VideoCallPage: NextPage = () => {
 };
 
 export default VideoCallPage;
+
