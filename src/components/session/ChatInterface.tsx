@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useRef, useEffect, FormEvent } from 'react';
@@ -14,11 +13,12 @@ import { sendChatMessageViaDataChannel } from '@/lib/webrtc/dataChannelHandler';
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
-  dataChannel: RTCDataChannel | null;
+  dataChannel: RTCDataChannel | null; // Keep for direct WebRTC DataChannel if used, or pass null if using ChatService
   currentUser: AppUser | null;
-  setChatMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>; // For local echo
-  isMediaSession: boolean; // To adjust height based on video feeds
-  callStatus: 'connected' | 'connecting' | 'idle' | 'disconnected' | 'ended' | 'error' | string; // Allow more statuses
+  setChatMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  isMediaSession: boolean;
+  callStatus: 'connected' | 'connecting' | 'idle' | 'disconnected' | 'ended' | 'error' | string;
+  sendMessageOverride?: (text: string) => void; // New prop for using ChatService
 }
 
 export function ChatInterface({
@@ -27,7 +27,8 @@ export function ChatInterface({
   currentUser,
   setChatMessages,
   isMediaSession,
-  callStatus
+  callStatus,
+  sendMessageOverride,
 }: ChatInterfaceProps) {
   const [chatInput, setChatInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -41,21 +42,37 @@ export function ChatInterface({
 
   const handleSendMessage = (e: FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim() || !currentUser || !dataChannel) return;
+    if (!chatInput.trim() || !currentUser) return;
 
-    const messageToSend: Omit<ChatMessage, 'id' | 'isOwn'> = {
-      senderUid: currentUser.uid,
-      senderName: currentUser.name || 'User',
-      text: chatInput.trim(),
-      timestamp: new Date().toISOString(),
-    };
-
-    if (sendChatMessageViaDataChannel(dataChannel, messageToSend, setChatMessages, toast)) {
+    if (sendMessageOverride) {
+      sendMessageOverride(chatInput.trim());
+      // Local echo might be handled by the calling component or ChatService
+      // If not, uncomment and adapt the local echo part below:
+      // const messageToSend: Omit<ChatMessage, 'id' | 'isOwn'> = {
+      //   senderUid: currentUser.uid,
+      //   senderName: currentUser.name || 'User',
+      //   text: chatInput.trim(),
+      //   timestamp: new Date().toISOString(),
+      // };
+      // setChatMessages(prev => [...prev, { ...messageToSend, id: Date.now().toString(), isOwn: true }]);
       setChatInput('');
+    } else if (dataChannel) { // Fallback to direct DataChannel if no override
+      const messageToSend: Omit<ChatMessage, 'id' | 'isOwn'> = {
+        senderUid: currentUser.uid,
+        senderName: currentUser.name || 'User',
+        text: chatInput.trim(),
+        timestamp: new Date().toISOString(),
+      };
+      if (sendChatMessageViaDataChannel(dataChannel, messageToSend, setChatMessages, toast)) {
+        setChatInput('');
+      }
+    } else {
+        toast({variant: "destructive", title: "Chat Error", description: "No way to send message configured."})
     }
   };
   
-  const chatDisabled = callStatus !== 'connected' || !dataChannel || dataChannel.readyState !== 'open';
+  const chatDisabled = callStatus !== 'connected' || (!dataChannel && !sendMessageOverride) || (dataChannel && dataChannel.readyState !== 'open' && !sendMessageOverride);
+
 
   return (
     <Card className={`bg-[hsl(var(--card))] border-[hsl(var(--border)/0.7)] shadow-xl flex flex-col ${!isMediaSession ? 'h-[calc(80vh-var(--header-height)-var(--footer-height)-7rem)] min-h-[400px]' : 'max-h-[calc(var(--video-card-height,300px)*1.5)] sm:max-h-[calc(var(--video-card-height,350px)*1.5)]'} w-full`}>
@@ -109,4 +126,3 @@ export function ChatInterface({
     </Card>
   );
 }
-
