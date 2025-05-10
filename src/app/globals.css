@@ -8,63 +8,58 @@ body {
 
 @layer base {
   :root {
-    --background: 240 38% 10%; /* Dark Blue/Purple */
-    --foreground: 0 0% 95%; /* Off-white */
+    --background: 260 60% 8%; /* Very Dark Indigo/Deep Purple */
+    --foreground: 300 30% 95%; /* Light Lavender/Off-white */
 
-    --card: 240 38% 15%;
-    --card-foreground: 0 0% 95%;
+    --card: 260 55% 12%; /* Darker card background */
+    --card-foreground: 300 30% 95%;
 
-    --popover: 240 38% 12%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 260 50% 10%; /* Dark popover */
+    --popover-foreground: 300 30% 95%;
 
-    --primary: 328 89% 73%; /* Glowing Pink #F77FBE */
-    --primary-foreground: 240 38% 5%; /* Dark, for contrast on pink */
+    --primary: 330 90% 65%; /* Vibrant Mystical Pink */
+    --primary-foreground: 330 30% 98%; /* Very light pink/white for contrast on primary */
 
-    --secondary: 240 38% 25%;
-    --secondary-foreground: 0 0% 95%;
+    --secondary: 270 50% 30%; /* Muted Purple */
+    --secondary-foreground: 300 30% 95%;
 
-    --muted: 240 38% 20%;
-    --muted-foreground: 0 0% 65%;
+    --muted: 260 50% 25%; /* Darker Muted Purple */
+    --muted-foreground: 300 20% 75%; /* Softer Lavender Gray */
 
-    --accent: 51 100% 50%; /* Gold #FFD700 */
-    --accent-foreground: 240 38% 5%; /* Very Dark, for contrast on gold */
+    --accent: 50 100% 65%; /* Mystical Gold */
+    --accent-foreground: 50 60% 10%; /* Dark Brown/Bronze for contrast on gold */
 
-    --destructive: 0 70% 50%;
+    --destructive: 0 70% 55%; /* Deep Red */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 38% 25%;
-    --input: 240 38% 20%;
-    --ring: 328 89% 68%; /* Adjusted pink for ring */
+    --border: 270 40% 35%; /* Purple-ish border */
+    --input: 260 50% 18%; /* Dark input background */
+    --ring: 330 80% 70%; /* Pink ring for focus */
 
-    --radius: 0.5rem;
+    --radius: 0.75rem; /* Slightly more rounded */
 
-    /* Specific SoulSeer colors */
-    --soulseer-pink: 330 100% 71%; /* #FF69B4 */
-    --soulseer-gold: 51 100% 50%; /* #FFD700 */
-    --soulseer-header-pink: 330 100% 71%; /* For Alex Brush headers */
+    /* Specific SoulSeer colors from image */
+    --soulseer-logo-pink: 330 90% 65%; /* For "SoulSeer" logo text if not an image */
+    --soulseer-header-pink: 330 90% 65%; /* For Alex Brush headers (same as primary) */
+    --soulseer-gold: 50 100% 65%; /* Same as accent */
+    --soulseer-magenta-glow: 320 100% 55%; /* For glowing effects if needed */
 
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --chart-1: var(--primary);
+    --chart-2: var(--accent);
+    --chart-3: 300 70% 60%; /* Lavender */
+    --chart-4: 220 70% 65%; /* Mystical Blue */
+    --chart-5: 0 0% 80%; /* Light Gray */
 
-    /* Sidebar variables - can be adjusted if sidebar is used extensively */
-    --sidebar-background: 240 38% 8%;
-    --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 328 89% 73%;
-    --sidebar-primary-foreground: 240 38% 5%;
-    --sidebar-accent: 240 38% 20%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 240 38% 22%;
-    --sidebar-ring: 328 89% 68%;
+    /* Sidebar variables - consistent with new theme */
+    --sidebar-background: 260 60% 6%;
+    --sidebar-foreground: 300 30% 90%;
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: 260 50% 15%;
+    --sidebar-accent-foreground: 300 30% 95%;
+    --sidebar-border: 270 40% 25%;
+    --sidebar-ring: var(--ring);
   }
-
-  /* Forcing dark theme as default as per request, 
-     but shadcn typically uses .dark class. We'll apply dark vars directly.
-     If true light/dark toggle is needed later, this needs rework. */
-  /* .dark class variables are not strictly needed if :root is already dark by default */
-
 }
 
 @layer base {
@@ -78,24 +73,34 @@ body {
 
   /* Global background image for the app */
   .app-background {
-    background-image: url('/images/mystical-background.jpg'); /* Placeholder, will be replaced by a proper image */
+    /* User will replace with their high-resolution image */
+    background-image: url('/images/soulseer-hero-background.jpg'); 
     background-size: cover;
     background-attachment: fixed;
     background-position: center;
+    position: relative; /* Needed for z-indexing of pseudo-elements */
   }
+  
   /* Add a subtle overlay to improve text readability over the background */
-  .app-background::before {
+  body.app-background::before {
     content: '';
-    position: fixed;
+    position: fixed; /* Cover the entire viewport */
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: hsla(var(--background), 0.6); /* Semi-transparent overlay */
-    z-index: -1;
+    background-color: hsla(var(--background), 0.75); /* Semi-transparent overlay using theme background color */
+    z-index: -10; /* Behind all content */
+  }
+  
+  /* Ensure main content area is above the ::before pseudo-element if it's on body */
+   main, header, footer {
+    position: relative;
+    z-index: 1;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+
+  h1, h2, h3, h4, h5, h6, .page-title-text { /* Added .page-title-text for explicit targeting */
     font-family: var(--font-alex-brush), cursive;
     color: hsl(var(--soulseer-header-pink));
   }
@@ -110,6 +115,13 @@ body {
   p, span, div, li, label, button, input, textarea, select, a {
     font-family: var(--font-playfair-display), serif;
   }
+
+  .soulseer-tagline {
+    font-family: var(--font-playfair-display), serif;
+    font-size: 1.25rem; /* Example size */
+    color: hsl(var(--foreground) / 0.9);
+    text-shadow: 1px 1px 3px hsla(var(--background), 0.5);
+  }
 }
 
 /* Styling for smooth scroll behavior */
@@ -117,17 +129,45 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Custom scrollbar for a more thematic feel - optional */
+/* Custom scrollbar for a more thematic feel */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: hsl(var(--background) / 0.5);
+  background: hsl(var(--background) / 0.7);
+  border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--primary) / 0.7);
-  border-radius: 4px;
+  background: hsl(var(--primary) / 0.6);
+  border-radius: 10px;
+  border: 2px solid hsl(var(--background) / 0.7);
 }
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--primary));
+}
+
+/* Additional style for tab active indicator from image */
+.soulseer-tabs-trigger[data-state="active"] {
+  border-bottom-color: hsl(var(--soulseer-gold)) !important;
+  color: hsl(var(--soulseer-gold)) !important;
+  background-color: transparent !important; /* Ensure primary background isn't interfering */
+}
+
+.soulseer-tabs-trigger {
+  padding-bottom: 0.5rem; /* Adjust as needed */
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+  border-bottom-color: transparent;
+  transition: border-color 0.3s ease, color 0.3s ease;
+}
+.soulseer-tabs-trigger:hover {
+   color: hsl(var(--soulseer-gold) / 0.8);
+}
+
+.soulseer-section-title {
+  font-family: var(--font-alex-brush), cursive;
+  font-size: 2.5rem; /* 40px */
+  color: hsl(var(--primary));
+  margin-bottom: 1.5rem; /* 24px */
+  text-align: left; /* As per image "Featured Products" styling */
 }
