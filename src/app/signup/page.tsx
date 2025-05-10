@@ -1,18 +1,39 @@
+'use client'; // Made component a client component
+
 import Link from 'next/link';
+import React, { useState } from 'react'; // Added useState
+import { useRouter } from 'next/navigation'; // Added useRouter
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PageTitle } from '@/components/ui/page-title';
 import { CelestialIcon } from '@/components/icons/celestial-icon';
+import { useAuth } from '@/contexts/auth-context'; // Added useAuth
+import { useToast } from '@/hooks/use-toast';
 
 export default function SignupPage() {
-  // Placeholder for form submission logic
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'client' | 'reader' | ''>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { signup } = useAuth();
+  const router = useRouter();
+  const { toast } = useToast();
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // TODO: Implement Appwrite signup logic
-    console.log('Signup form submitted');
+    if (!role) {
+        toast({ variant: 'destructive', title: 'Validation Error', description: 'Please select your role.' });
+        return;
+    }
+    setIsLoading(true);
+    const success = await signup(email, password, name, role as 'client' | 'reader');
+    setIsLoading(false);
+    if (success) {
+      router.push('/'); // Redirect to homepage on successful signup
+    }
   };
 
   return (
@@ -30,21 +51,54 @@ export default function SignupPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="name" className="font-playfair-display text-foreground/90">Full Name</Label>
-              <Input id="name" type="text" placeholder="Your Spirit Name" required className="bg-input text-foreground placeholder:text-muted-foreground"/>
+              <Label htmlFor="name-signup" className="font-playfair-display text-foreground/90">Full Name</Label>
+              <Input 
+                id="name-signup" 
+                type="text" 
+                placeholder="Your Spirit Name" 
+                required 
+                className="bg-input text-foreground placeholder:text-muted-foreground"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={isLoading}
+              />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email" className="font-playfair-display text-foreground/90">Email</Label>
-              <Input id="email" type="email" placeholder="mystic@example.com" required className="bg-input text-foreground placeholder:text-muted-foreground"/>
+              <Label htmlFor="email-signup" className="font-playfair-display text-foreground/90">Email</Label>
+              <Input 
+                id="email-signup" 
+                type="email" 
+                placeholder="mystic@example.com" 
+                required 
+                className="bg-input text-foreground placeholder:text-muted-foreground"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+              />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="font-playfair-display text-foreground/90">Password</Label>
-              <Input id="password" type="password" placeholder="Create a sacred password" required className="bg-input text-foreground placeholder:text-muted-foreground"/>
+              <Label htmlFor="password-signup" className="font-playfair-display text-foreground/90">Password</Label>
+              <Input 
+                id="password-signup" 
+                type="password" 
+                placeholder="Create a sacred password (min. 6 characters)" 
+                required 
+                className="bg-input text-foreground placeholder:text-muted-foreground"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
+              />
             </div>
              <div className="space-y-2">
-              <Label htmlFor="role" className="font-playfair-display text-foreground/90">I am a...</Label>
-              <Select name="role" required>
-                <SelectTrigger className="w-full bg-input text-foreground">
+              <Label htmlFor="role-signup" className="font-playfair-display text-foreground/90">I am a...</Label>
+              <Select 
+                name="role" 
+                required 
+                onValueChange={(value: 'client' | 'reader') => setRole(value)}
+                value={role}
+                disabled={isLoading}
+              >
+                <SelectTrigger id="role-signup" className="w-full bg-input text-foreground">
                   <SelectValue placeholder="Select your role" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover text-popover-foreground">
@@ -53,8 +107,8 @@ export default function SignupPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display text-lg py-3">
-              Create Account
+            <Button type="submit" className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display text-lg py-3" disabled={isLoading}>
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </Button>
           </form>
         </CardContent>

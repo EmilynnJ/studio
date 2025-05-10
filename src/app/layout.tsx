@@ -1,7 +1,8 @@
 import type {Metadata} from 'next';
 import { Alex_Brush, Playfair_Display } from 'next/font/google';
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster"; // Assuming Toaster is already set up
+import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from '@/contexts/auth-context'; // Added AuthProvider
 
 const alexBrush = Alex_Brush({
   subsets: ['latin'],
@@ -30,8 +31,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${alexBrush.variable} ${playfairDisplay.variable} font-playfair-display antialiased app-background`}>
-        {children}
-        <Toaster />
+        <AuthProvider> {/* Wrapped children with AuthProvider */}
+          {children}
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );

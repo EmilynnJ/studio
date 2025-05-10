@@ -1,17 +1,32 @@
+'use client'; // Made component a client component
+
 import Link from 'next/link';
+import React, { useState } from 'react'; // Added useState
+import { useRouter } from 'next/navigation'; // Added useRouter
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageTitle } from '@/components/ui/page-title';
 import { CelestialIcon } from '@/components/icons/celestial-icon';
+import { useAuth } from '@/contexts/auth-context'; // Added useAuth
+import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
-  // Placeholder for form submission logic
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
+  const router = useRouter();
+  const { toast } = useToast();
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // TODO: Implement Appwrite login logic
-    console.log('Login form submitted');
+    setIsLoading(true);
+    const success = await login(email, password);
+    setIsLoading(false);
+    if (success) {
+      router.push('/'); // Redirect to homepage on successful login
+    }
   };
 
   return (
@@ -29,15 +44,33 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email" className="font-playfair-display text-foreground/90">Email</Label>
-              <Input id="email" type="email" placeholder="mystic@example.com" required className="bg-input text-foreground placeholder:text-muted-foreground" />
+              <Label htmlFor="email-login" className="font-playfair-display text-foreground/90">Email</Label>
+              <Input 
+                id="email-login" 
+                type="email" 
+                placeholder="mystic@example.com" 
+                required 
+                className="bg-input text-foreground placeholder:text-muted-foreground"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+              />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="font-playfair-display text-foreground/90">Password</Label>
-              <Input id="password" type="password" placeholder="Your sacred password" required className="bg-input text-foreground placeholder:text-muted-foreground"/>
+              <Label htmlFor="password-login" className="font-playfair-display text-foreground/90">Password</Label>
+              <Input 
+                id="password-login" 
+                type="password" 
+                placeholder="Your sacred password" 
+                required 
+                className="bg-input text-foreground placeholder:text-muted-foreground"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
+              />
             </div>
-            <Button type="submit" className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display text-lg py-3">
-              Enter the Portal
+            <Button type="submit" className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display text-lg py-3" disabled={isLoading}>
+              {isLoading ? 'Entering...' : 'Enter the Portal'}
             </Button>
           </form>
         </CardContent>
