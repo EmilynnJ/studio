@@ -9,6 +9,9 @@ export default {
   ],
   theme: {
   	extend: {
+      aspectRatio: {
+        'video': '16 / 9',
+      },
       fontFamily: {
         'alex-brush': ['var(--font-alex-brush)', 'cursive'],
         'playfair-display': ['var(--font-playfair-display)', 'serif'],
