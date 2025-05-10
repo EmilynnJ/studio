@@ -1,3 +1,4 @@
+
 import Image from 'next/image';
 import { PageTitle } from '@/components/ui/page-title';
 import { Separator } from '@/components/ui/separator';
@@ -31,22 +32,22 @@ export default function AboutPage() {
 
       <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
         <div>
-          <h3 className="text-3xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] mb-6">Our Mission</h3>
+          <h3 className="text-3xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] mb-6">Our Mission & Founder</h3>
           <p className="text-lg text-foreground/80 font-playfair-display leading-loose mb-4">
             Our mission is to provide a trusted and accessible platform where individuals can connect with gifted spiritual readers from around the world. We aim to demystify spiritual practices and make profound wisdom available to all who seek it, fostering a supportive community for exploration and personal development.
           </p>
           <p className="text-lg text-foreground/80 font-playfair-display leading-loose">
-            At SoulSeer, we champion authenticity, integrity, and compassion. Each reader is carefully vetted to ensure they align with our core values, offering genuine insight and heartfelt support.
+            Founded by a passionate spiritual seeker, SoulSeer champions authenticity, integrity, and compassion. Each reader is carefully vetted to ensure they align with our core values, offering genuine insight and heartfelt support.
           </p>
         </div>
         <div className="flex justify-center">
            <Image
-            src="https://picsum.photos/seed/mission/400/400"
-            alt="Symbol of spiritual mission, e.g., a glowing crystal or intricate mandala"
+            src="https://i.postimg.cc/6pY1f7zv/Picsart-25-03-12-11-39-59-336-1.jpg"
+            alt="SoulSeer Founder"
             width={400}
             height={400}
-            className="rounded-full shadow-2xl border-2 border-[hsl(var(--soulseer-gold)/0.5)]"
-            data-ai-hint="glowing crystal"
+            className="rounded-full shadow-2xl border-2 border-[hsl(var(--soulseer-gold)/0.5)] object-cover"
+            data-ai-hint="founder portrait"
           />
         </div>
       </div>

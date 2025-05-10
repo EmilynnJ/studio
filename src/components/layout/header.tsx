@@ -1,11 +1,13 @@
+
 'use client'; // Made component a client component
 
 import Link from 'next/link';
+import Image from 'next/image'; // Added Image import
 import { useRouter } from 'next/navigation'; 
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Menu, Home, Users, ShoppingCart, MessageCircle, Video, Info, HelpCircle, LogIn, UserPlus, UserCircle, LogOut, Settings, ShieldQuestion } from 'lucide-react'; 
-import { CelestialIcon } from '@/components/icons/celestial-icon';
+// import { CelestialIcon } from '@/components/icons/celestial-icon'; // Removed CelestialIcon as logo image is used
 import { useAuth } from '@/contexts/auth-context'; 
 
 const navLinks = [
@@ -36,10 +38,15 @@ export function Header() {
       <header className="sticky top-0 z-50 w-full border-b border-[hsl(var(--border)/0.6)] bg-[hsl(var(--background)/0.8)] backdrop-blur-md shadow-lg">
         <div className="container mx-auto flex h-20 items-center justify-between px-4 md:px-6">
           <Link href="/" className="flex items-center gap-2">
-             {/* Using text logo styled with Alex Brush as primary, can be replaced by an Image component if actual logo image is available */}
-            <span className="text-4xl font-alex-brush text-[hsl(var(--soulseer-logo-pink))]">
-              SoulSeer
-            </span>
+            <Image 
+              src="https://i.postimg.cc/CKMpFTrj/Soul-Seer-Psychic-Readings-Spiritual-Shop-Community-20250310-060210-0000.png" 
+              alt="SoulSeer Logo" 
+              width={160} // Adjusted width for a typical logo size
+              height={40} // Adjusted height, maintaining aspect ratio
+              className="object-contain" // Use contain to ensure logo isn't cropped
+              priority
+              data-ai-hint="logo brand"
+            />
           </Link>
           <div className="h-8 w-24 animate-pulse rounded bg-muted"></div>
         </div>
@@ -51,11 +58,15 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b border-[hsl(var(--border)/0.6)] bg-[hsl(var(--background)/0.9)] backdrop-blur-md shadow-lg">
       <div className="container mx-auto flex h-20 items-center justify-between px-4 md:px-6">
         <Link href="/" className="flex items-center gap-2 group">
-          {/* Placeholder for actual logo image, if available */}
-          {/* <Image src="/path-to-soulseer-logo.png" alt="SoulSeer Logo" width={40} height={40} /> */}
-          <span className="text-4xl font-alex-brush text-[hsl(var(--soulseer-logo-pink))] group-hover:text-[hsl(var(--primary)/0.8)] transition-colors">
-            SoulSeer
-          </span>
+          <Image 
+            src="https://i.postimg.cc/CKMpFTrj/Soul-Seer-Psychic-Readings-Spiritual-Shop-Community-20250310-060210-0000.png" 
+            alt="SoulSeer Logo" 
+            width={180} // Adjusted width for a typical logo size
+            height={45} // Adjusted height, maintaining aspect ratio (assuming 4:1 or similar)
+            className="object-contain h-auto group-hover:opacity-90 transition-opacity" // Use contain to ensure logo isn't cropped, adjust height auto
+            priority
+            data-ai-hint="logo brand"
+          />
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
@@ -102,7 +113,14 @@ export function Header() {
             </SheetTrigger>
             <SheetContent side="right" className="w-[280px] bg-background p-6 flex flex-col">
               <Link href="/" className="mb-6 flex items-center gap-2 self-start">
-                <span className="text-3xl font-alex-brush text-[hsl(var(--soulseer-logo-pink))]">SoulSeer</span>
+                 <Image 
+                    src="https://i.postimg.cc/CKMpFTrj/Soul-Seer-Psychic-Readings-Spiritual-Shop-Community-20250310-060210-0000.png" 
+                    alt="SoulSeer Logo" 
+                    width={140} 
+                    height={35}
+                    className="object-contain h-auto"
+                    data-ai-hint="logo brand"
+                  />
               </Link>
               <nav className="flex flex-col gap-2 flex-grow">
                 {navLinks.map((link) => (
