@@ -11,7 +11,7 @@ import {
   signOut,
   updateProfile,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/firebase';
 import type { AppUser } from '@/types/user';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +22,7 @@ interface AuthContextType {
   login: (email_login: string, password_login: string) => Promise<boolean>;
   signup: (email_signup: string, password_signup: string, name_signup: string, role_signup: 'client' | 'reader') => Promise<boolean>;
   logout: () => Promise<void>;
+  updateUserStatus: (uid: string, status: 'online' | 'offline' | 'busy') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -46,17 +47,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             photoURL: firebaseUser.photoURL,
             role: customData.role || null,
             createdAt: customData.createdAt,
+            status: customData.status || (customData.role === 'reader' ? 'offline' : undefined), // Default reader status to offline
           });
         } else {
-          // This case might happen if user was created but Firestore doc failed
-          // Or if user is from a different auth system / manual creation.
-          // For now, set with available Firebase data and null role.
           setCurrentUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email,
             name: firebaseUser.displayName,
             photoURL: firebaseUser.photoURL,
-            role: null, // Role unknown
+            role: null, 
+            status: undefined,
           });
           console.warn(`No Firestore document found for user ${firebaseUser.uid}`);
         }
@@ -87,10 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userCredential = await createUserWithEmailAndPassword(auth, email_signup, password_signup);
       const firebaseUser = userCredential.user;
 
-      // Update Firebase Auth profile
       await updateProfile(firebaseUser, { displayName: name_signup });
 
-      // Create user document in Firestore
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       await setDoc(userDocRef, {
         uid: firebaseUser.uid,
@@ -98,7 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: name_signup,
         role: role_signup,
         createdAt: serverTimestamp(),
-        photoURL: null, // Can be updated later
+        photoURL: null,
+        status: role_signup === 'reader' ? 'offline' : undefined, // Initialize reader status
       });
       
       toast({ title: 'Signup Successful', description: 'Welcome to SoulSeer!' });
@@ -113,6 +112,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
+      if (currentUser?.role === 'reader') {
+        await updateUserStatus(currentUser.uid, 'offline');
+      }
       await signOut(auth);
       toast({ title: 'Logged Out', description: 'You have been successfully logged out.' });
     } catch (error) {
@@ -122,12 +124,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateUserStatus = async (uid: string, status: 'online' | 'offline' | 'busy') => {
+    try {
+      const userDocRef = doc(db, 'users', uid);
+      await updateDoc(userDocRef, { status });
+      if (currentUser && currentUser.uid === uid) {
+        setCurrentUser(prev => prev ? { ...prev, status } : null);
+      }
+    } catch (error) {
+      console.error("Error updating user status:", error);
+      toast({ variant: 'destructive', title: 'Status Update Failed', description: 'Could not update user status.' });
+    }
+  };
+
+
   const value = {
     currentUser,
     loading,
     login,
     signup,
     logout,
+    updateUserStatus,
   };
 
   return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
