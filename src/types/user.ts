@@ -8,4 +8,6 @@ export interface AppUser {
   role: 'client' | 'reader' | null; // Role selected during signup
   createdAt?: Timestamp; // Timestamp from Firestore
   status?: 'online' | 'offline' | 'busy'; // Reader availability status
+  ratePerMinute?: number; // For readers, e.g., price in USD per minute
 }
+

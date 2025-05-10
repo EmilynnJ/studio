@@ -8,7 +8,7 @@ import { ReaderCard, type Reader } from '@/components/readers/reader-card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Search, Filter, Users, Loader2 } from 'lucide-react';
+import { Search, Filter, Users, Loader2, Clock } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,11 +41,12 @@ export default function ReadersPage() {
           fetchedReaders.push({
             id: userData.uid,
             name: userData.name || 'Unnamed Reader',
-            specialties: 'Tarot, Astrology', // Placeholder, add to user doc
-            rating: Math.random() * (5 - 3.5) + 3.5, // Placeholder rating
+            specialties: userData.specialties || 'Tarot, Astrology', // Placeholder, add to user doc if not already
+            rating: userData.rating || Math.random() * (5 - 3.5) + 3.5, // Placeholder rating if not in user doc
             imageUrl: userData.photoURL || `https://picsum.photos/seed/${userData.uid}/400/300`,
             status: userData.status || 'offline',
-            shortBio: `Spiritual guide with experience in various modalities. Discover clarity and insight.`, // Placeholder bio
+            shortBio: userData.shortBio || `Spiritual guide with experience in various modalities. Discover clarity and insight.`, // Placeholder bio
+            ratePerMinute: userData.ratePerMinute || 5, // Example: $5/min default. Should come from userData.
             dataAiHint: 'spiritual reader',
           });
         });
@@ -149,4 +150,11 @@ export default function ReadersPage() {
       )} */}
     </div>
   );
+}
+
+// Temp Interfaces to include missing fields from AppUser for ReaderCard, eventually AppUser and Reader type should be more aligned or mapping should be more robust
+interface TempAppUser extends AppUser {
+  specialties?: string;
+  rating?: number;
+  shortBio?: string;
 }

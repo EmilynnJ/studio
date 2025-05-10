@@ -4,7 +4,7 @@
 import React from 'react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Loader2, AlertTriangle, UserCheck } from 'lucide-react';
+import { CheckCircle, Loader2, AlertTriangle, UserCheck, Clock, DollarSign, UserCircle } from 'lucide-react'; // Added Clock, DollarSign, UserCircle
 import type { CallStatus, SessionType, VideoSessionData, OpponentInfo } from '@/types/session';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
@@ -46,24 +46,24 @@ export function SessionStatusDisplay({
     if (sessionData.status === 'pending' && currentUser.uid === sessionData.clientUid) {
       statusMessage = `Waiting for ${sessionData.readerName || 'Reader'} to accept your request...`;
       titleMessage = `Pending ${sessionType} Session`;
-    } else if (sessionData.status === 'accepted_by_reader' && currentUser.uid === sessionData.clientUid) {
-      statusMessage = `${sessionData.readerName || 'Reader'} has accepted and is joining...`;
-      titleMessage = `Connecting ${sessionType} Session`;
+    } else if ((sessionData.status === 'accepted_by_reader' || sessionData.status === 'pending' && currentUser.uid === sessionData.readerUid) && callStatus !== 'connected') {
+       statusMessage = `Connecting with ${currentUser.uid === sessionData.readerUid ? sessionData.clientName : sessionData.readerName}...`;
+       titleMessage = `Preparing ${sessionType} Session`;
     }
   }
   
-  if (callStatus === 'waiting_permission' && isMediaSession) {
-    statusMessage = statusMessage || 'Preparing session & requesting permissions...';
-  } else if (callStatus === 'permission_granted' && isMediaSession && callStatus !== 'connecting' && callStatus !== 'connected') {
-    statusMessage = statusMessage || 'Permissions granted, initializing connection...';
-  } else if (callStatus === 'connecting') {
-    statusMessage = statusMessage || `Attempting to connect to ${opponent?.name || 'participant'}...`;
+  if (callStatus === 'waiting_permission' && isMediaSession && !statusMessage) {
+    statusMessage = 'Requesting media permissions...';
+  } else if (callStatus === 'permission_granted' && isMediaSession && callStatus !== 'connecting' && callStatus !== 'connected' && !statusMessage) {
+    statusMessage = 'Permissions granted, establishing connection...';
+  } else if (callStatus === 'connecting' && !statusMessage) {
+    statusMessage = `Attempting to connect to ${opponent?.name || 'participant'}...`;
   } else if (callStatus === 'disconnected') {
     statusMessage = 'Connection lost. Attempting to reconnect...';
   }
 
 
-  if (callStatus === 'idle' || callStatus === 'loading_session' || (callStatus === 'waiting_permission' && isMediaSession) || (callStatus === 'permission_granted' && isMediaSession && callStatus !== 'connecting' && callStatus !== 'connected') && !(sessionData?.status === 'pending' || sessionData?.status === 'accepted_by_reader')) {
+  if (callStatus === 'idle' || callStatus === 'loading_session' || (callStatus === 'waiting_permission' && isMediaSession) || (callStatus === 'permission_granted' && isMediaSession && callStatus !== 'connecting' && callStatus !== 'connected') && !((sessionData?.status === 'pending' || sessionData?.status === 'accepted_by_reader') && callStatus !== 'connected')) {
     return (
       <div className="container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-[calc(100vh-var(--header-height,10rem)-var(--footer-height,10rem))]">
         <Loader2 className="h-12 w-12 sm:h-16 sm:w-16 animate-spin text-[hsl(var(--primary))]" />
@@ -108,14 +108,29 @@ export function SessionStatusDisplay({
           {titleMessage}
         </p>
         {(callStatus === 'connected' || (callStatus === 'ended' && sessionData?.startedAt)) && (
-          <p className="font-playfair-display text-xl sm:text-2xl text-[hsl(var(--accent))] mt-1 sm:mt-2">
-            Session Time: {formatTime(sessionTimer)}
-          </p>
+          <div className="font-playfair-display text-lg sm:text-xl mt-1 sm:mt-2 space-y-0.5 sm:space-y-1">
+            <p className="text-[hsl(var(--accent))]">
+              <Clock className="inline-block h-5 w-5 mr-1.5 align-text-bottom" />
+              Session Time: {formatTime(sessionTimer)}
+            </p>
+            {sessionData?.readerRatePerMinute !== undefined && (
+              <p className="text-sm text-foreground/80">
+                <DollarSign className="inline-block h-4 w-4 mr-1 align-text-bottom" />
+                Rate: ${sessionData.readerRatePerMinute.toFixed(2)}/min
+              </p>
+            )}
+            {currentUser?.role === 'client' && ( // Only show balance placeholder to client for now
+                <p className="text-sm text-foreground/80">
+                    <UserCircle className="inline-block h-4 w-4 mr-1 align-text-bottom" />
+                    Your Balance: $XX.XX <span className="text-xs">(Billing not active)</span>
+                </p>
+            )}
+          </div>
         )}
-        {statusMessage && (callStatus === 'connecting' || callStatus === 'disconnected' || sessionData?.status === 'pending' || sessionData?.status === 'accepted_by_reader') && (
-          <div className="flex items-center justify-center gap-2 font-playfair-display text-base sm:text-lg mt-1 sm:mt-2">
-            {(callStatus === 'connecting' || sessionData?.status === 'accepted_by_reader' && callStatus !== 'connected') && <Loader2 className="h-5 w-5 animate-spin text-foreground/80" />}
-            {sessionData?.status === 'pending' && <Clock className="h-5 w-5 text-foreground/80" />}
+        {statusMessage && (callStatus === 'connecting' || callStatus === 'disconnected' || (sessionData?.status === 'pending' || sessionData?.status === 'accepted_by_reader')  && callStatus !== 'connected') && (
+          <div className="flex items-center justify-center gap-2 font-playfair-display text-sm sm:text-base mt-1 sm:mt-2">
+            {(callStatus === 'connecting' || (sessionData?.status === 'accepted_by_reader' && callStatus !== 'connected')) && <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-foreground/80" />}
+            {sessionData?.status === 'pending' && currentUser?.uid === sessionData.clientUid && <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-foreground/80" />}
              <p className={`${callStatus === 'disconnected' ? 'text-destructive' : 'text-foreground/80'} ${callStatus === 'connecting' ? 'animate-pulse' : ''}`}>
               {statusMessage}
             </p>
@@ -129,6 +144,9 @@ export function SessionStatusDisplay({
           <AlertTitle className="font-alex-brush text-lg sm:text-xl text-[hsl(var(--soulseer-header-pink))]">Session Ended</AlertTitle>
           <AlertDescription className="font-playfair-display text-sm sm:text-base text-foreground/80">
             The session has concluded. Total time: {formatTime(sessionData.totalMinutes ? sessionData.totalMinutes * 60 : sessionTimer)}.
+            {sessionData.readerRatePerMinute !== undefined && sessionData.totalMinutes !== undefined && (
+              <span className="block mt-1">Amount (Placeholder): ${(sessionData.readerRatePerMinute * sessionData.totalMinutes).toFixed(2)}</span>
+            )}
           </AlertDescription>
           <Button onClick={() => router.push('/dashboard')} className="mt-4 w-full">Back to Dashboard</Button>
         </Alert>
@@ -136,4 +154,3 @@ export function SessionStatusDisplay({
     </>
   );
 }
-

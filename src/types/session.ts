@@ -30,6 +30,7 @@ export interface VideoSessionData {
   sessionType: SessionType;
   totalMinutes?: number;
   amountCharged?: number;
+  readerRatePerMinute?: number; // Added reader's rate for the session
 }
 
 export interface ChatMessage {
@@ -42,4 +43,5 @@ export interface ChatMessage {
 }
 
 export interface OpponentInfo extends Pick<AppUser, 'name' | 'uid' | 'photoURL'> {}
+
 

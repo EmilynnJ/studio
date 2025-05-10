@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Star, Zap, Video, Mic, MessageSquare } from 'lucide-react';
+import { Star, Zap, Video, Mic, MessageSquare, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
@@ -21,6 +21,7 @@ export interface Reader {
   imageUrl: string;
   status?: 'online' | 'offline' | 'busy';
   shortBio?: string;
+  ratePerMinute?: number; // Added rate per minute
   dataAiHint?: string;
   email?: string; 
   role?: 'reader'; 
@@ -50,7 +51,7 @@ export function ReaderCard({ reader }: ReaderCardProps) {
       return;
     }
     if (reader.status !== 'online') {
-      toast({ variant: 'destructive', title: 'Reader Offline', description: 'This reader is currently not available.' });
+      toast({ variant: 'destructive', title: 'Reader Offline', description: 'This reader is currently not available for new sessions.' });
       return;
     }
 
@@ -61,16 +62,17 @@ export function ReaderCard({ reader }: ReaderCardProps) {
         sessionId,
         readerUid: reader.id,
         readerName: reader.name,
-        readerPhotoURL: reader.imageUrl, // Pass reader photo
+        readerPhotoURL: reader.imageUrl, 
+        readerRatePerMinute: reader.ratePerMinute, // Store reader's rate
         clientUid: currentUser.uid,
         clientName: currentUser.name || 'Client',
-        clientPhotoURL: currentUser.photoURL || null, // Pass client photo
+        clientPhotoURL: currentUser.photoURL || null, 
         status: 'pending', 
         requestedAt: serverTimestamp(),
         sessionType: sessionType, 
       });
       
-      toast({ title: 'Session Requested', description: `Connecting you for a ${sessionType} session with ${reader.name}...` });
+      toast({ title: 'Session Requested', description: `Waiting for ${reader.name} to accept your ${sessionType} session...` });
       router.push(`/session/${sessionId}`);
     } catch (error) {
       console.error("Error requesting session:", error);
@@ -88,8 +90,8 @@ export function ReaderCard({ reader }: ReaderCardProps) {
         );
       case 'busy':
         return (
-          <div className="absolute top-3 right-3 bg-yellow-500 text-background px-3 py-1 rounded-full text-xs font-semibold font-playfair-display shadow-md">
-            Busy
+          <div className="absolute top-3 right-3 bg-yellow-500 text-background px-3 py-1 rounded-full text-xs font-semibold font-playfair-display shadow-md flex items-center gap-1">
+            <Clock className="w-3 h-3" /> Busy
           </div>
         );
       case 'offline':
@@ -140,6 +142,11 @@ export function ReaderCard({ reader }: ReaderCardProps) {
           ))}
         </div>
         {reader.shortBio && <CardDescription className="text-xs sm:text-sm text-foreground/80 font-playfair-display line-clamp-3 mb-2">{reader.shortBio}</CardDescription>}
+        {reader.ratePerMinute !== undefined && (
+          <p className="text-sm font-semibold text-[hsl(var(--soulseer-gold))] font-playfair-display mb-2">
+            Rate: ${reader.ratePerMinute.toFixed(2)}/min
+          </p>
+        )}
       </CardContent>
       <CardFooter className="p-4 sm:p-6 pt-0 flex flex-col gap-2">
         <Button asChild variant="outline" className="w-full border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] font-playfair-display text-sm">
@@ -184,4 +191,5 @@ export function ReaderCard({ reader }: ReaderCardProps) {
     </Card>
   );
 }
+
 
