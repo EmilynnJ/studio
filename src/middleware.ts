@@ -4,45 +4,44 @@ import { getToken } from 'next-auth/jwt';
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // DEBUG: Log the pathname for every request
+  // Remove this after debugging
+  // @ts-ignore
+  console.log('MIDDLEWARE DEBUG - pathname:', pathname);
 
-  // Public routes that don't require authentication
-  const publicPaths = [
-    '/login',
-    '/signup',
-    '/api/auth',
-    '/_next',
-    '/static',
-    '/favicon.ico'
-  ];
-  if (publicPaths.some((path) => pathname.startsWith(path))) {
+  // Always allow public access to the home page and index
+  if (
+    pathname === '/' ||
+    pathname === '' ||
+    pathname === '/index' ||
+    pathname.startsWith('/?')
+  ) {
     return NextResponse.next();
   }
 
-  // Get JWT token
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-
-  // Redirect unauthenticated users to login page
-  if (!token) {
-    const loginUrl = new URL('/login', req.url);
-    loginUrl.searchParams.set('callbackUrl', req.url);
-    return NextResponse.redirect(loginUrl);
+  // Only require authentication for specific protected routes
+  const protectedPaths = [
+    '/session',
+    '/api/sessions',
+    '/api/stripe/charge',
+    // Add more protected paths as needed
+  ];
+  if (protectedPaths.some((path) => pathname.startsWith(path))) {
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    if (!token) {
+      const loginUrl = new URL('/login', req.url);
+      loginUrl.searchParams.set('callbackUrl', req.url);
+      return NextResponse.redirect(loginUrl);
+    }
+    // Optionally, enforce roles for session flows if needed
+    if (pathname.startsWith('/session') && token.role !== 'client') {
+      return NextResponse.redirect(new URL('/login', req.url));
+    }
   }
-
-  // Enforce reader role for reader dashboard
-  if (pathname.startsWith('/readers') && token.role !== 'reader') {
-    return NextResponse.redirect(new URL('/login', req.url));
-  }
-
-  // Enforce client role for session flows
-  if (pathname.startsWith('/session') && token.role !== 'client') {
-    return NextResponse.redirect(new URL('/login', req.url));
-  }
-
-  // Allow all other requests
+  // All other routes are public
   return NextResponse.next();
 }
 
 export const config = {
-  // Apply middleware to all routes except static files and next internals
-  matcher: ['/((?!_next|static|favicon.ico).*)'],
+  matcher: ['/', '/session/:path*', '/api/sessions/:path*', '/api/stripe/charge/:path*'],
 };
