@@ -6,6 +6,7 @@ interface StripeBillingConfig {
   sessionId: string;
   ratePerMinute: number;
   clientBalance: number; // in cents
+  readerAccountId: string; // Stripe Connect account ID for the reader
 }
 
 interface BillingStatus {
@@ -89,10 +90,32 @@ class StripeBillingService {
         totalMinutes: this.minutesElapsedThisSession,
       });
 
-      // TODO: Actual Stripe charge call to backend API
-      // fetch('/api/stripe/charge', { method: 'POST', body: JSON.stringify({ clientId: this.config.clientId, amount: this.ratePerMinute, sessionId: this.config.sessionId })})
+      // Actual Stripe charge call to backend API
+      fetch('/api/stripe/charge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId: this.config.clientId,
+          amount: this.ratePerMinute,
+          sessionId: this.config.sessionId,
+          transfer_data: {
+            destination: this.config.readerAccountId, // Include reader's Stripe account for Connect payouts
+          },
+        }),
+      }).then(async (response) => {
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Stripe charge failed:', errorData.error);
+          this.endBilling('stripe_charge_failed');
+        }
+      }).catch((error) => {
+        console.error('Stripe charge error:', error);
+        this.endBilling('stripe_charge_error');
+      });
 
-      if (this.currentBalance < this.ratePerMinute) {
+      if (this.currentBalance !== null && this.ratePerMinute !== null && this.currentBalance < this.ratePerMinute) {
         this.endBilling('insufficient_funds');
       }
     }, BILLING_INTERVAL);

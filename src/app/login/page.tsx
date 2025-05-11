@@ -1,32 +1,59 @@
 
-'use client'; // Made component a client component
+'use client';
 
 import Link from 'next/link';
-import React, { useState } from 'react'; // Added useState
-import { useRouter } from 'next/navigation'; // Added useRouter
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CelestialIcon } from '@/components/icons/celestial-icon';
-import { useAuth } from '@/contexts/auth-context'; // Added useAuth
 import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
-    const success = await login(email, password);
-    setIsLoading(false);
-    if (success) {
-      router.push('/'); // Redirect to homepage on successful login
+    
+    try {
+      const result = await signIn('credentials', {
+        redirect: false,
+        email,
+        password,
+      });
+      
+      if (result?.error) {
+        toast({
+          title: "Authentication failed",
+          description: result.error,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success!",
+          description: "You've successfully logged in.",
+          variant: "default",
+        });
+        router.push('/'); // Redirect to homepage on successful login
+        router.refresh(); // Refresh to update auth state in the UI
+      }
+    } catch (error) {
+      toast({
+        title: "Something went wrong",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+      console.error("Login error:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -70,13 +97,29 @@ export default function LoginPage() {
                 disabled={isLoading}
               />
             </div>
-            <Button type="submit" className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display text-lg py-3" disabled={isLoading}>
-              {isLoading ? 'Entering...' : 'Enter the Portal'}
+            <Button 
+              type="submit" 
+              className="w-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary)/0.9)] font-playfair-display text-lg py-3" 
+              disabled={isLoading}
+            >
+              {isLoading ? 
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Entering...
+                </span> : 
+                'Enter the Portal'
+              }
             </Button>
           </form>
         </CardContent>
         <CardFooter className="flex flex-col items-center space-y-2">
-          <Link href="#" className="text-sm font-playfair-display text-[hsl(var(--primary))] hover:underline">
+          <Link 
+            href="/forgot-password" 
+            className="text-sm font-playfair-display text-[hsl(var(--primary))] hover:underline"
+          >
             Forgot your password?
           </Link>
           <p className="text-sm font-playfair-display text-muted-foreground">

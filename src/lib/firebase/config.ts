@@ -5,7 +5,7 @@ export const firebaseConfig = {
   authDomain: "soulseer-2c4ed.firebaseapp.com",
   databaseURL: "https://soulseer-2c4ed-default-rtdb.firebaseio.com",
   projectId: "soulseer-2c4ed",
-  storageBucket: "soulseer-2c4ed.appspot.com", // Corrected from firebasestorage.app to appspot.com
+  storageBucket: "soulseer-2c4ed.appspot.com",
   messagingSenderId: "81229695823",
   appId: "1:81229695823:web:0f767ea0512c3a4f2b533a",
   measurementId: "G-VFGKGNEY0D"

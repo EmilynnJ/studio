@@ -28,7 +28,7 @@ class ChatService {
     this.userId = userId;
     this.userName = userName;
 
-    this.socket.emit('join-chat-room', { roomId });
+    this.socket.emit('join-room', { roomId });
 
     this.socket.on('chat-message', (message: ChatMessage) => {
       if (message.roomId === this.roomId) {
@@ -55,7 +55,7 @@ class ChatService {
       timestamp: new Date().toISOString(),
       roomId: this.roomId,
     };
-    this.socket.emit('send-chat-message', message);
+    this.socket.emit('chat-message', message);
     // Local echo can be handled by the component calling this, or here if preferred.
     // For now, assuming component handles local echo upon successful send.
     return message; 
@@ -63,7 +63,7 @@ class ChatService {
 
   disconnect() {
     if (this.roomId) {
-      this.socket.emit('leave-chat-room', { roomId: this.roomId });
+      this.socket.emit('leave-room', { roomId: this.roomId });
     }
     this.socket.off('chat-message'); // Remove specific listener
     console.log(`ChatService disconnected for room ${this.roomId}`);

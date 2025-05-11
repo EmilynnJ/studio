@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase/firebase'; // Adjust path as necessary
+import { db } from '@/lib/firebase/firebase';
 
 export async function POST(
   request: Request,
@@ -14,20 +14,13 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const startTime = body.startTime ? new Date(body.startTime) : new Date(); // Use provided or current time
+    const startTime = body.startTime ? new Date(body.startTime) : new Date();
 
-    const sessionDocRef = doc(db, 'videoSessions', sessionId); // Assuming 'videoSessions'
-    
-    // Check if session exists before updating (optional, depends on flow)
-    // const sessionDocSnap = await getDoc(sessionDocRef);
-    // if (!sessionDocSnap.exists()) {
-    //   return NextResponse.json({ error: 'Session not found' }, { status: 404 });
-    // }
+    const sessionDocRef = doc(db, 'videoSessions', sessionId);
 
     await updateDoc(sessionDocRef, {
-      status: 'active', // Or whatever status indicates it's started
-      startedAt: serverTimestamp(), // Use server timestamp for accuracy
-      // Potentially update other fields as needed
+      status: 'active',
+      startedAt: serverTimestamp(),
     });
 
     return NextResponse.json({ message: 'Session started successfully', startedAt: startTime.toISOString() });

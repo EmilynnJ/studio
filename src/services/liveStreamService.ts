@@ -7,6 +7,52 @@ type ViewerHandler = (viewer: { userId: string; userName: string }) => void;
 type GiftHandler = (gift: { id: string; senderName: string; type: string; amount: number; timestamp: string }) => void;
 type RemoteStreamHandler = (event: CustomEvent<MediaStream>) => void;
 
+// Mobile detection utility
+const isMobile = (): boolean => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+         (window.innerWidth <= 768);
+};
+
+// Media constraints based on device type
+interface MediaConstraintsOptions {
+  forceMobile?: boolean;
+  highQuality?: boolean;
+}
+
+const getMediaConstraints = (options: MediaConstraintsOptions = {}): MediaStreamConstraints => {
+  const { forceMobile, highQuality } = options;
+  const mobile = forceMobile || isMobile();
+  
+  // Default constraints
+  const constraints: MediaStreamConstraints = {
+    audio: true,
+    video: true
+  };
+  
+  // Enhanced video constraints
+  if (constraints.video !== false) {
+    const videoConstraints: MediaTrackConstraints = {
+      facingMode: 'user'
+    };
+    
+    if (mobile && !highQuality) {
+      // Lower resolution for mobile to save bandwidth
+      videoConstraints.width = { ideal: 640 };
+      videoConstraints.height = { ideal: 480 };
+      videoConstraints.frameRate = { max: 24 };
+    } else {
+      // Higher quality for desktop or when explicitly requested
+      videoConstraints.width = { ideal: 1280 };
+      videoConstraints.height = { ideal: 720 };
+      videoConstraints.frameRate = { ideal: 30 };
+    }
+    
+    constraints.video = videoConstraints;
+  }
+  
+  return constraints;
+};
+
 
 class LiveStreamService {
   private socket: Socket | null = null;
@@ -15,6 +61,10 @@ class LiveStreamService {
   private streamId: string | null = null;
   private isStreamer: boolean = false;
   private onRemoteStreamCallback: RemoteStreamHandler | null = null;
+  private reconnectionAttempts: number = 0;
+  private maxReconnectionAttempts: number = 5;
+  private reconnectionDelay: number = 1000; // Starting delay in ms
+  private orientationChangeHandler: (() => void) | null = null;
 
 
   initialize(
@@ -97,8 +147,15 @@ class LiveStreamService {
     }
 
     this.peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
     });
+    
+    // Handle ICE connection state changes
+    this.peerConnection.oniceconnectionstatechange = this.handleICEConnectionStateChange.bind(this);
 
     this.localStream?.getTracks().forEach(track => {
         if(this.localStream && this.peerConnection) {
@@ -124,8 +181,15 @@ class LiveStreamService {
 
   private setupViewerPeerConnection() {
     this.peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
     });
+    
+    // Handle ICE connection state changes
+    this.peerConnection.oniceconnectionstatechange = this.handleICEConnectionStateChange.bind(this);
 
     this.peerConnection.ontrack = event => {
       console.log('Viewer: Track received', event.track, event.streams);
@@ -148,31 +212,170 @@ class LiveStreamService {
   }
 
 
-  async getUserMedia(): Promise<MediaStream> {
+  async getUserMedia(options: MediaConstraintsOptions = {}): Promise<MediaStream> {
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const constraints = getMediaConstraints(options);
+      console.log('Getting user media with constraints:', constraints);
+      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // Set up orientation change handler for mobile devices
+      this.setupOrientationChangeHandler();
+      
       return this.localStream;
     } catch (error) {
       console.error('Error accessing media devices.', error);
       throw error;
     }
   }
+  
+  private setupOrientationChangeHandler() {
+    // Remove any existing handler
+    if (this.orientationChangeHandler) {
+      window.removeEventListener('orientationchange', this.orientationChangeHandler);
+      this.orientationChangeHandler = null;
+    }
+    
+    if (isMobile() && this.localStream) {
+      this.orientationChangeHandler = async () => {
+        console.log('Orientation changed, adjusting video constraints');
+        
+        // Wait for the orientation change to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Get current video track
+        const videoTrack = this.localStream?.getVideoTracks()[0];
+        if (!videoTrack) return;
+        
+        // Apply new constraints based on new orientation
+        const isPortrait = window.innerHeight > window.innerWidth;
+        try {
+          await videoTrack.applyConstraints({
+            width: { ideal: isPortrait ? 480 : 640 },
+            height: { ideal: isPortrait ? 640 : 480 },
+            frameRate: { max: 24 }
+          });
+          console.log('Applied new constraints after orientation change');
+        } catch (error) {
+          console.error('Failed to apply new constraints after orientation change', error);
+        }
+      };
+      
+      window.addEventListener('orientationchange', this.orientationChangeHandler);
+    }
+  }
+  
+  private handleICEConnectionStateChange() {
+    if (!this.peerConnection) return;
+    
+    const connectionState = this.peerConnection.iceConnectionState;
+    console.log('ICE connection state changed:', connectionState);
+    
+    switch (connectionState) {
+      case 'disconnected':
+        console.log('ICE disconnected, attempting to recover...');
+        this.attemptICERestart();
+        break;
+      case 'failed':
+        console.log('ICE connection failed, attempting restart with backoff...');
+        this.attemptICERestartWithBackoff();
+        break;
+      case 'connected':
+      case 'completed':
+        // Reset reconnection attempts on successful connection
+        this.reconnectionAttempts = 0;
+        break;
+    }
+  }
+  
+  private attemptICERestart() {
+    if (!this.peerConnection || !this.socket || !this.streamId) return;
+    
+    // For the streamer, create a new offer with ICE restart
+    if (this.isStreamer) {
+      this.peerConnection.createOffer({ iceRestart: true })
+        .then(offer => this.peerConnection!.setLocalDescription(offer))
+        .then(() => {
+          if (this.socket && this.peerConnection?.localDescription && this.streamId) {
+            // Notify all connected viewers about the ICE restart
+            this.socket.emit('streamer-ice-restart', { 
+              offer: this.peerConnection.localDescription, 
+              streamId: this.streamId 
+            });
+          }
+        })
+        .catch(e => console.error("Error creating ICE restart offer:", e));
+    } else {
+      // For viewers, request a new offer from the streamer
+      this.socket.emit('request-ice-restart', { streamId: this.streamId });
+    }
+  }
+  
+  private attemptICERestartWithBackoff() {
+    if (this.reconnectionAttempts >= this.maxReconnectionAttempts) {
+      console.log('Max reconnection attempts reached, giving up');
+      return;
+    }
+    
+    // Calculate exponential backoff delay
+    const delay = this.reconnectionDelay * Math.pow(2, this.reconnectionAttempts);
+    this.reconnectionAttempts++;
+    
+    console.log(`Attempting ICE restart in ${delay}ms (attempt ${this.reconnectionAttempts}/${this.maxReconnectionAttempts})`);
+    
+    setTimeout(() => {
+      this.attemptICERestart();
+    }, delay);
+  }
 
-  async startStreaming(stream: MediaStream) {
+  async startStreaming(stream: MediaStream, options: MediaConstraintsOptions = {}) {
     if (!this.socket || !this.streamId || !this.isStreamer) return;
-    this.localStream = stream;
+    
+    // If no stream is provided, get one with the specified options
+    if (!stream) {
+      stream = await this.getUserMedia(options);
+    } else {
+      this.localStream = stream;
+      // Still set up orientation change handler even if stream is provided externally
+      this.setupOrientationChangeHandler();
+    }
     
     // Streamer is ready, but waits for viewers to request connection
     this.socket.emit('start-stream', { streamId: this.streamId });
     console.log('Streamer started stream:', this.streamId);
+    
+    // Set up socket listeners for ICE restart requests from viewers
+    this.socket.on('request-ice-restart', ({ viewerSocketId }) => {
+      console.log('Received ICE restart request from viewer:', viewerSocketId);
+      if (this.peerConnection) {
+        this.setupStreamerPeerConnection(viewerSocketId); // This will create a new PC with fresh ICE candidates
+      }
+    });
   }
   
-  joinStream() {
+  joinStream(options: MediaConstraintsOptions = {}) {
     if(!this.isStreamer && this.socket && this.streamId) {
-        console.log(`Viewer joining stream: ${this.streamId}`);
+        console.log(`Viewer joining stream: ${this.streamId} with options:`, options);
         // Logic to set up peer connection as viewer and receive stream
-        // This is simplified; a real implementation would involve SDP exchange
         this.setupViewerPeerConnection();
+        
+        // Set up socket listener for ICE restart from streamer
+        this.socket.on('streamer-ice-restart', async ({ offer }) => {
+          console.log('Received ICE restart offer from streamer');
+          if (this.peerConnection) {
+            try {
+              await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+              const answer = await this.peerConnection.createAnswer();
+              await this.peerConnection.setLocalDescription(answer);
+              this.socket?.emit('answer-to-streamer', { 
+                answer, 
+                streamId: this.streamId 
+              });
+              console.log('Sent answer after ICE restart');
+            } catch (e) {
+              console.error("Error handling ICE restart offer:", e);
+            }
+          }
+        });
     }
   }
 
@@ -224,12 +427,25 @@ class LiveStreamService {
   }
 
   cleanup() {
+    // Remove orientation change handler
+    if (this.orientationChangeHandler) {
+      window.removeEventListener('orientationchange', this.orientationChangeHandler);
+      this.orientationChangeHandler = null;
+    }
+    
+    // Remove socket listeners specific to this instance
+    if (this.socket) {
+      this.socket.off('streamer-ice-restart');
+      this.socket.off('request-ice-restart');
+    }
+    
     this.localStream?.getTracks().forEach(track => track.stop());
     this.localStream = null;
     this.peerConnection?.close();
     this.peerConnection = null;
-    // Socket listeners specific to this service instance might need removal if socket is shared
-    // For now, assuming socket is disconnected globally or managed by socketService
+    // Reset reconnection state
+    this.reconnectionAttempts = 0;
+    
     console.log('LiveStreamService cleaned up for stream:', this.streamId);
   }
 }

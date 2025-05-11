@@ -320,7 +320,7 @@ const LiveStreamContainer: React.FC<LiveStreamContainerProps> = ({ viewerMode = 
         <h2 className="text-3xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] mb-4">Stream Error</h2>
         <p className="text-destructive mb-6 font-playfair-display text-lg">{error}</p>
         <button
-          className="px-6 py-3 bg-primary text-primary-foreground rounded-md font-playfair-display hover:bg-primary/90"
+          className="px-6 py-3 bg-primary text-primary-foreground rounded-md font-playfair-display hover:bg-primary/90 text-lg p-2"
           onClick={() => router.push('/dashboard')}
         >
           Return to Dashboard
@@ -335,7 +335,7 @@ const LiveStreamContainer: React.FC<LiveStreamContainerProps> = ({ viewerMode = 
         <h2 className="text-3xl font-alex-brush text-[hsl(var(--soulseer-header-pink))] mb-4">Stream Ended</h2>
         <p className="text-foreground/80 mb-6 font-playfair-display text-lg">This live stream has ended.</p>
         <button
-          className="px-6 py-3 bg-primary text-primary-foreground rounded-md font-playfair-display hover:bg-primary/90"
+          className="px-6 py-3 bg-primary text-primary-foreground rounded-md font-playfair-display hover:bg-primary/90 text-lg p-2"
           onClick={() => router.push('/')}
         >
           Back to Home
@@ -347,8 +347,8 @@ const LiveStreamContainer: React.FC<LiveStreamContainerProps> = ({ viewerMode = 
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 p-2 md:p-4">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+        <div className="w-full md:w-2/3 p-2 md:p-4">
           {viewerMode ? (
             <ViewerView
               streamer={streamData?.streamer || { name: streamData?.streamerName || 'Streamer' }}
@@ -377,17 +377,39 @@ const LiveStreamContainer: React.FC<LiveStreamContainerProps> = ({ viewerMode = 
           )}
         </div>
 
-        <div className="w-full md:w-80 lg:w-96 border-l border-border/30 flex flex-col bg-card/50">
+        <div className="w-full md:w-1/3 border-t md:border-t-0 md:border-l border-border/30 flex flex-col bg-card/50">
           <LiveChat
             messages={messages}
             sendMessage={sendMessage}
             currentUser={currentUser} // Pass AppUser
           />
           {viewerMode && currentUser && streamData && (
-            <GiftPanel
-              sendGift={sendGift}
-              streamerName={streamData?.streamerName || 'Streamer'}
-            />
+            <div className="md:relative">
+              {/* Desktop view - inline */}
+              <div className="hidden md:block">
+                <GiftPanel
+                  sendGift={sendGift}
+                  streamerName={streamData?.streamerName || 'Streamer'}
+                />
+              </div>
+              
+              {/* Mobile view - bottom sheet */}
+              <div className="md:hidden fixed bottom-0 left-0 right-0 h-1/2 bg-card z-10 rounded-t-xl shadow-lg border-t border-border/30 overflow-hidden">
+                <div className="p-2 border-b border-border/30 flex justify-between items-center">
+                  <h3 className="font-alex-brush text-xl text-[hsl(var(--soulseer-header-pink))]">Send a Gift</h3>
+                  <button className="p-2 text-lg rounded-full hover:bg-muted">
+                    <span className="sr-only">Close</span>
+                    ✕
+                  </button>
+                </div>
+                <div className="p-2 overflow-auto h-[calc(100%-3rem)]">
+                  <GiftPanel
+                    sendGift={sendGift}
+                    streamerName={streamData?.streamerName || 'Streamer'}
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

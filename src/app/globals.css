@@ -40,7 +40,7 @@ body {
 
     /* Specific SoulSeer colors */
     --soulseer-logo-pink: 330 90% 65%; /* For "SoulSeer" logo text */
-    --soulseer-header-pink: 330 90% 65%; /* Alex Brush headers - Red/Peach Pink */
+    --soulseer-header-pink: 330 95% 60%; /* Alex Brush headers - Richer Red/Peach Pink */
     --soulseer-gold: 50 100% 65%; /* Same as accent */
     --soulseer-magenta-glow: 320 100% 55%; /* For glowing effects if needed */
 
@@ -110,11 +110,12 @@ body {
   h1, h2, h3, h4, h5, h6, .page-title-text, .main-header-text { 
     font-family: var(--font-alex-brush), cursive;
     color: hsl(var(--soulseer-header-pink));
-    /* White halo glow effect */
+    /* Enhanced white halo glow effect */
     text-shadow: 
-      0 0 3px hsl(var(--foreground) / 0.7), 
-      0 0 6px hsl(var(--foreground) / 0.5),
-      0 0 9px hsl(var(--foreground) / 0.3);
+      0 0 3px hsl(var(--foreground) / 0.8), 
+      0 0 6px hsl(var(--foreground) / 0.6),
+      0 0 9px hsl(var(--foreground) / 0.4),
+      0 0 12px hsl(var(--foreground) / 0.2);
   }
   
   .soulseer-tagline {
@@ -179,4 +180,14 @@ html {
      margin-bottom: 1.5rem; /* 24px */
   }
   text-align: left; 
+}
+
+@layer utilities {
+  .text-halo-white {
+    text-shadow: 
+      0 0 3px hsl(var(--foreground) / 0.8), 
+      0 0 6px hsl(var(--foreground) / 0.6),
+      0 0 9px hsl(var(--foreground) / 0.4),
+      0 0 12px hsl(var(--foreground) / 0.2);
+  }
 }

@@ -3,6 +3,7 @@ import { Alex_Brush, Playfair_Display } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/contexts/auth-context'; // Added AuthProvider
+import '@/lib/firebase/firebase'; // Import Firebase SDK initialization
 
 const alexBrush = Alex_Brush({
   subsets: ['latin'],
@@ -30,6 +31,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body className={`${alexBrush.variable} ${playfairDisplay.variable} font-playfair-display antialiased app-background`}>
         <AuthProvider> {/* Wrapped children with AuthProvider */}
           {children}

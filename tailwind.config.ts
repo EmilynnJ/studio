@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 export default {
     darkMode: ["class"],
@@ -19,6 +20,7 @@ export default {
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
+        peachPink: 'hsl(330 90% 65%)',
   			card: {
   				DEFAULT: 'hsl(var(--card))',
   				foreground: 'hsl(var(--card-foreground))'
@@ -100,5 +102,19 @@ export default {
   		}
   	}
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    plugin(function({ addUtilities }) {
+      addUtilities({
+        '.text-halo-white': {
+          'text-shadow': `
+            0 0 3px hsl(var(--foreground) / 0.8), 
+            0 0 6px hsl(var(--foreground) / 0.6),
+            0 0 9px hsl(var(--foreground) / 0.4),
+            0 0 12px hsl(var(--foreground) / 0.2)
+          `
+        }
+      })
+    })
+  ],
 } satisfies Config;

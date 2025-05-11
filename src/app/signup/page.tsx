@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CelestialIcon } from '@/components/icons/celestial-icon';
-import { useAuth } from '@/contexts/auth-context'; // Added useAuth
+import { signIn } from 'next-auth/react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function SignupPage() {
@@ -19,7 +19,6 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'client' | 'reader' | ''>('');
   const [isLoading, setIsLoading] = useState(false);
-  const { signup } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -29,11 +28,57 @@ export default function SignupPage() {
         toast({ variant: 'destructive', title: 'Validation Error', description: 'Please select your role.' });
         return;
     }
+    
     setIsLoading(true);
-    const success = await signup(email, password, name, role as 'client' | 'reader');
-    setIsLoading(false);
-    if (success) {
-      router.push('/'); // Redirect to homepage on successful signup
+    
+    try {
+      // Call our custom API route to create the user in Prisma
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          role,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create account');
+      }
+      
+      // Sign in the user automatically using NextAuth
+      const signInResult = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+      });
+      
+      if (signInResult?.error) {
+        throw new Error(signInResult.error || 'Failed to sign in');
+      }
+      
+      toast({
+        title: 'Account created!',
+        description: 'Welcome to SoulSeer. Your journey begins now.',
+      });
+      
+      // Redirect based on role
+      router.push(role === 'client' ? '/' : '/dashboard');
+      
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Something went wrong. Please try again.',
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 

@@ -72,15 +72,9 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b border-[hsl(var(--border)/0.6)] bg-[hsl(var(--background)/0.9)] backdrop-blur-md shadow-lg">
       <div className="container mx-auto flex h-16 sm:h-20 items-center justify-between px-4 md:px-6">
         <Link href="/" className="flex items-center gap-2 group shrink-0">
-          <Image 
-            src="https://i.postimg.cc/CKMpFTrj/Soul-Seer-Psychic-Readings-Spiritual-Shop-Community-20250310-060210-0000.png" 
-            alt="SoulSeer Logo" 
-            width={180} 
-            height={45} 
-            className="object-contain h-auto w-auto max-h-[35px] sm:max-h-[40px] md:max-h-[45px] group-hover:opacity-90 transition-opacity"
-            priority
-            data-ai-hint="logo brand"
-          />
+          <h1 className="font-alex-brush text-[26px] sm:text-[32px] md:text-[36px] text-peachPink text-halo-white select-none cursor-pointer">
+            SoulSeer
+          </h1>
         </Link>
 
         <nav className="hidden items-center gap-0.5 lg:gap-1 md:flex">

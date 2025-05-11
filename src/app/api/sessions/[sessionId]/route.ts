@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/firebase'; // Adjust path as necessary
+import { db } from '@/lib/firebase/firebase';
 
 export async function GET(
   request: Request,
@@ -13,7 +13,7 @@ export async function GET(
   }
 
   try {
-    const sessionDocRef = doc(db, 'videoSessions', sessionId); // Assuming 'videoSessions' is your collection
+    const sessionDocRef = doc(db, 'videoSessions', sessionId);
     const sessionDocSnap = await getDoc(sessionDocRef);
 
     if (!sessionDocSnap.exists()) {
@@ -21,18 +21,7 @@ export async function GET(
     }
 
     const sessionData = sessionDocSnap.data();
-    
-    // Potentially fetch related reader/client data if not embedded
-    // For example:
-    // const readerDoc = await getDoc(doc(db, 'users', sessionData.readerUid));
-    // const clientDoc = await getDoc(doc(db, 'users', sessionData.clientUid));
-    // const populatedSessionData = {
-    //   ...sessionData,
-    //   reader: readerDoc.data(),
-    //   client: clientDoc.data(),
-    // };
 
-    // For now, returning raw session data
     return NextResponse.json({ ...sessionData, id: sessionDocSnap.id });
 
   } catch (error) {
