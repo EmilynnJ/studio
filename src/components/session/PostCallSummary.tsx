@@ -1,155 +1,96 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useToast } from '@/hooks/use-toast';
+import React from 'react';
+import { useWebRTC } from './WebRTCProvider';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Star } from 'lucide-react';
-import type { VideoSessionData } from '@/types/session';
+import { useRouter } from 'next/navigation';
 
 interface PostCallSummaryProps {
-  sessionData: VideoSessionData;
+  sessionId: string;
 }
 
-const PostCallSummary: React.FC<PostCallSummaryProps> = ({ sessionData }) => {
+const PostCallSummary: React.FC<PostCallSummaryProps> = ({ sessionId }) => {
+  const { billingStatus, opponentInfo } = useWebRTC();
   const router = useRouter();
-  const { toast } = useToast();
-
-  const [rating, setRating] = useState<number>(0);
-  const [comment, setComment] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-
-  const handleSubmit = async () => {
-    if (rating < 1) {
-      toast({
-        variant: 'destructive',
-        title: 'Rating required',
-        description: 'Please select a star rating before submitting.',
-      });
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/sessions/${sessionData.id}/feedback`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating, comment }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to submit feedback');
-      }
-      toast({
-        variant: 'default',
-        title: 'Thank you!',
-        description: 'Your feedback has been submitted.',
-      });
-      router.push('/dashboard');
-    } catch (err: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Submission failed',
-        description: err.message || 'Could not send feedback.',
-      });
-    } finally {
-      setLoading(false);
+  
+  // Format duration from minutes to HH:MM:SS
+  const formatDuration = (minutes: number | null): string => {
+    if (!minutes) return '00:00:00';
+    
+    const hours = Math.floor(minutes / 60);
+    const mins = Math.floor(minutes % 60);
+    const secs = Math.floor((minutes * 60) % 60);
+    
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+  
+  // Format currency
+  const formatCurrency = (amount: number | null): string => {
+    if (amount === null) return '$0.00';
+    return `$${amount.toFixed(2)}`;
+  };
+  
+  const handleReturnHome = () => {
+    router.push('/');
+  };
+  
+  const handleRequestAnotherReading = () => {
+    if (opponentInfo?.uid) {
+      router.push(`/request-reading/${opponentInfo.uid}`);
+    } else {
+      router.push('/readers');
     }
   };
-
-  const chatMessages = (sessionData.chatHistory || sessionData.chat) ?? [];
-  const previewMessages = Array.isArray(chatMessages) ? chatMessages.slice(-5) : [];
-
+  
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6 bg-background">
-      <h2 className="text-2xl font-semibold">Session Summary</h2>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-sm text-muted-foreground">Total Time</p>
-          <p className="text-lg font-medium">{sessionData.duration} minutes</p>
-        </div>
-        <div>
-          <p className="text-sm text-muted-foreground">Amount Charged</p>
-          <p className="text-lg font-medium">${sessionData.totalAmount}</p>
-        </div>
-      </div>
-
-      {sessionData.transcriptUrl && (
-        <div>
-          <p className="text-sm text-muted-foreground">Transcript</p>
-          <a
-            href={sessionData.transcriptUrl}
-            download
-            className="text-primary hover:underline"
-          >
-            Download Transcript
-          </a>
-        </div>
-      )}
-
-      {previewMessages.length > 0 && (
-        <div>
-          <p className="text-sm text-muted-foreground">Chat Preview</p>
-          <div className="mt-2 space-y-2 max-h-40 overflow-y-auto p-2 border rounded">
-            {previewMessages.map((msg: any) => (
-              <div key={msg.id} className="flex flex-col">
-                <span className="text-xs font-semibold">{msg.senderName}</span>
-                <span className="text-sm">{msg.text}</span>
-              </div>
-            ))}
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader>
+        <CardTitle className="text-center">Session Summary</CardTitle>
+      </CardHeader>
+      
+      <CardContent className="space-y-4">
+        <div className="bg-muted p-4 rounded-md">
+          <h3 className="font-medium mb-2">Session Details</h3>
+          
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="text-muted-foreground">Reader:</div>
+            <div>{opponentInfo?.name || 'Unknown'}</div>
+            
+            <div className="text-muted-foreground">Session ID:</div>
+            <div className="truncate">{sessionId}</div>
+            
+            <div className="text-muted-foreground">Duration:</div>
+            <div>{formatDuration(billingStatus.totalMinutes)}</div>
+            
+            <div className="text-muted-foreground">Rate:</div>
+            <div>{formatCurrency(billingStatus.ratePerMinute)} per minute</div>
+            
+            <div className="text-muted-foreground">Total Charged:</div>
+            <div className="font-medium">{formatCurrency(billingStatus.totalBilled)}</div>
           </div>
         </div>
-      )}
-
-      <div>
-        <p className="text-sm text-muted-foreground">Rate Your Experience</p>
-        <div className="flex mt-1">
-          {[1, 2, 3, 4, 5].map((star) => (
-            <button
-              key={star}
-              type="button"
-              onClick={() => setRating(star)}
-              className="p-1"
-            >
-              <Star
-                size={24}
-                className={
-                  star <= rating ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'
-                }
-              />
-            </button>
-          ))}
+        
+        <div className="bg-primary/10 p-4 rounded-md">
+          <h3 className="font-medium mb-2">Thank You</h3>
+          <p className="text-sm">
+            Thank you for using SoulSeer. We hope you enjoyed your session with {opponentInfo?.name || 'our reader'}.
+            Your feedback helps us improve our service.
+          </p>
         </div>
-      </div>
-
-      <div>
-        <p className="text-sm text-muted-foreground">Feedback (optional)</p>
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          rows={4}
-          className="w-full mt-1 p-2 border rounded focus:outline-none focus:ring focus:ring-primary"
-          placeholder="Write your feedback here..."
-        />
-      </div>
-
-      <div className="flex space-x-4 pt-4">
-        <Button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="flex-1"
-        >
-          {loading ? 'Submitting...' : 'Submit Feedback'}
+        
+        {/* Optional: Rating/Feedback section could be added here */}
+      </CardContent>
+      
+      <CardFooter className="flex flex-col sm:flex-row gap-2 justify-between">
+        <Button variant="outline" onClick={handleReturnHome} className="w-full sm:w-auto">
+          Return Home
         </Button>
-        <Button
-          variant="secondary"
-          onClick={() => router.push('/dashboard')}
-          className="flex-1"
-        >
-          Back to Dashboard
+        <Button onClick={handleRequestAnotherReading} className="w-full sm:w-auto">
+          Request Another Reading
         </Button>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   );
 };
 

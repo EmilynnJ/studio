@@ -1,7 +1,7 @@
 // src/services/webRTCService.ts
 import type { Socket } from 'socket.io-client';
 import { webrtcServersConfig } from '@/lib/webrtc/config';
-import { setupDataChannelEventsHandler } from '@/lib/webrtc/dataChannelHandler';
+import { setupDataChannelEventsHandler, sendChatMessageViaDataChannel } from '@/lib/webrtc/dataChannelHandler';
 import type { ChatMessage } from '@/types/session';
 import type { ToastSignature } from '@/hooks/use-toast';
 
@@ -26,9 +26,113 @@ class WebRTCService {
   private maxReconnectionAttempts: number = 5;
   private reconnectionTimer: NodeJS.Timeout | null = null;
   private orientationChangeHandler: (() => void) | null = null;
+  private userId: string | null = null;
+  private userRole: 'reader' | 'client' | null = null;
 
-  constructor(socketService: Socket) {
+  constructor(socketService: Socket, userId?: string, userRole?: 'reader' | 'client') {
     this.socket = socketService;
+    this.userId = userId || null;
+    this.userRole = userRole || null;
+    this.setupSocketListeners();
+  }
+
+  private setupSocketListeners() {
+    // Clean up any existing listeners to prevent duplicates
+    this.socket.off('ice-candidate');
+    this.socket.off('offer');
+    this.socket.off('answer');
+    this.socket.off('user-joined');
+    this.socket.off('user-left');
+    this.socket.off('session-ended');
+    
+    // Handle incoming ICE candidates
+    this.socket.on('ice-candidate', async (data: { candidate: RTCIceCandidateInit, from: string, target?: string }) => {
+      if (!this.peerConnection) return;
+      
+      // Only process candidates meant for this user or with no specific target
+      if (data.target && this.userId && data.target !== this.userId) return;
+      
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        console.log('Added received ICE candidate');
+      } catch (e) {
+        console.error("Error adding received ICE candidate", e);
+      }
+    });
+
+    // Handle incoming offers
+    this.socket.on('offer', async (data: { offer: RTCSessionDescriptionInit, from: string, target?: string }) => {
+      if (!this.peerConnection) return;
+      
+      // Only process offers meant for this user or with no specific target
+      if (data.target && this.userId && data.target !== this.userId) return;
+      
+      try {
+        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        console.log('Set remote description from offer');
+        
+        const answer = await this.peerConnection.createAnswer();
+        await this.peerConnection.setLocalDescription(answer);
+        console.log('Created and set local description (answer)');
+        
+        // Send answer back
+        this.socket.emit('answer', { 
+          roomId: this.roomId, 
+          answer, 
+          target: data.from 
+        });
+      } catch (error) {
+        console.error('Error handling offer:', error);
+      }
+    });
+    
+    // Handle incoming answers
+    this.socket.on('answer', async (data: { answer: RTCSessionDescriptionInit, from: string, target?: string }) => {
+      if (!this.peerConnection) return;
+      
+      // Only process answers meant for this user or with no specific target
+      if (data.target && this.userId && data.target !== this.userId) return;
+      
+      try {
+        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        console.log('Set remote description from answer');
+      } catch (error) {
+        console.error('Error handling answer:', error);
+      }
+    });
+    
+    // Handle user joining the room
+    this.socket.on('user-joined', (data: { userId: string, userRole: string }) => {
+      console.log(`User ${data.userId} (${data.userRole}) joined the room`);
+      
+      // If we're the initiator and a new user joined, send an offer
+      if (this.peerConnection && this.userRole === 'reader') {
+        this.createAndSendOffer();
+      }
+    });
+    
+    // Handle user leaving the room
+    this.socket.on('user-left', (data: { userId: string, userRole: string }) => {
+      console.log(`User ${data.userId} (${data.userRole}) left the room`);
+      
+      // If the other peer left, notify the UI
+      if (this.onConnectionStateChangeCallback) {
+        this.onConnectionStateChangeCallback('disconnected');
+      }
+    });
+    
+    // Handle session ended
+    this.socket.on('session-ended', (data: { sessionId: string, endedBy: string, reason: string }) => {
+      console.log(`Session ${data.sessionId} ended by ${data.endedBy}. Reason: ${data.reason}`);
+      
+      // Clean up resources
+      this.disconnect();
+      
+      // Notify the UI
+      if (this.onConnectionStateChangeCallback) {
+        this.onConnectionStateChangeCallback('closed');
+      }
+    });
   }
 
   private isMobileDevice(): boolean {
@@ -79,8 +183,10 @@ class WebRTCService {
     this.toast = toast;
   }
 
-  async initialize(roomId: string, isInitiator: boolean): Promise<MediaStream> {
+  async initialize(roomId: string, userId: string, userRole: 'reader' | 'client'): Promise<MediaStream> {
     this.roomId = roomId;
+    this.userId = userId;
+    this.userRole = userRole;
     
     try {
       // Use device-appropriate constraints
@@ -100,7 +206,7 @@ class WebRTCService {
     });
 
     // Set up data channel for chat
-    if (isInitiator) {
+    if (userRole === 'reader') {
       this.dataChannel = this.peerConnection.createDataChannel('chat', {
         ordered: true,
         maxRetransmits: 3
@@ -124,7 +230,7 @@ class WebRTCService {
         this.socket.emit('ice-candidate', { 
           roomId, 
           candidate: event.candidate, 
-          target: isInitiator ? 'callee' : 'caller' 
+          target: userRole === 'reader' ? 'client' : 'reader' 
         });
       }
     };
@@ -166,24 +272,17 @@ class WebRTCService {
       }
     };
     
-    // Set up socket event listeners for signaling
-    this.setupSignalingListeners(roomId, isInitiator);
+    // Join the room
+    this.socket.emit('join-room', roomId);
     
     // Add orientation change listener for mobile devices
     if (this.isMobileDevice()) {
       this.setupOrientationChangeHandler();
     }
 
-    // Create and send offer if initiator
-    if (isInitiator) {
-      try {
-        const offer = await this.peerConnection.createOffer();
-        await this.peerConnection.setLocalDescription(offer);
-        this.socket.emit('offer', { roomId, offer });
-      } catch (error) {
-        console.error('Error creating offer:', error);
-        throw error;
-      }
+    // Create and send offer if reader
+    if (userRole === 'reader') {
+      await this.createAndSendOffer();
     }
 
     if (!this.localStream) {
@@ -192,44 +291,23 @@ class WebRTCService {
     return this.localStream;
   }
 
-  private setupSignalingListeners(roomId: string, isInitiator: boolean) {
-    // Clean up any existing listeners to prevent duplicates
-    this.socket.off('ice-candidate');
-    this.socket.off('offer');
-    this.socket.off('answer');
+  private async createAndSendOffer() {
+    if (!this.peerConnection || !this.roomId) return;
     
-    // Handle incoming ICE candidates
-    this.socket.on('ice-candidate', (data: { candidate: RTCIceCandidateInit }) => {
-      if (!this.peerConnection) return;
+    try {
+      const offer = await this.peerConnection.createOffer();
+      await this.peerConnection.setLocalDescription(offer);
+      console.log('Created and set local description (offer)');
       
-      this.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
-        .catch(e => console.error("Error adding received ice candidate", e));
-    });
-
-    // Handle incoming offers (for non-initiator)
-    this.socket.on('offer', async (data: { offer: RTCSessionDescriptionInit }) => {
-      if (!isInitiator && this.peerConnection) {
-        try {
-          await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-          const answer = await this.peerConnection.createAnswer();
-          await this.peerConnection.setLocalDescription(answer);
-          this.socket.emit('answer', { roomId, answer });
-        } catch (error) {
-          console.error('Error handling offer:', error);
-        }
-      }
-    });
-    
-    // Handle incoming answers (for initiator)
-    this.socket.on('answer', async (data: { answer: RTCSessionDescriptionInit }) => {
-      if (isInitiator && this.peerConnection) {
-        try {
-          await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-        } catch (error) {
-          console.error('Error handling answer:', error);
-        }
-      }
-    });
+      this.socket.emit('offer', { 
+        roomId: this.roomId, 
+        offer,
+        target: this.userRole === 'reader' ? 'client' : 'reader'
+      });
+    } catch (error) {
+      console.error('Error creating offer:', error);
+      throw error;
+    }
   }
 
   onRemoteStream(callback: (stream: MediaStream) => void) {
@@ -254,7 +332,7 @@ class WebRTCService {
       return false;
     }
     
-    return setupDataChannelEventsHandler.sendChatMessageViaDataChannel(
+    return sendChatMessageViaDataChannel(
       this.dataChannel,
       message,
       this.setChatMessages,
@@ -340,12 +418,18 @@ class WebRTCService {
   }
 
   disconnect() {
-    // Clean up socket listeners
+    // Leave the room
     if (this.roomId) {
-      this.socket.off('ice-candidate');
-      this.socket.off('offer');
-      this.socket.off('answer');
+      this.socket.emit('leave-room', this.roomId);
     }
+    
+    // Clean up socket listeners
+    this.socket.off('ice-candidate');
+    this.socket.off('offer');
+    this.socket.off('answer');
+    this.socket.off('user-joined');
+    this.socket.off('user-left');
+    this.socket.off('session-ended');
     
     // Remove orientation change handler
     if (this.orientationChangeHandler) {
@@ -373,6 +457,8 @@ class WebRTCService {
     this.setChatMessages = null;
     this.toast = null;
     this.roomId = null;
+    this.userId = null;
+    this.userRole = null;
   }
 }
 

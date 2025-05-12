@@ -1,70 +1,104 @@
 'use client';
 
 import React from 'react';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Settings } from 'lucide-react'; // Added Settings
+import { useWebRTC } from './WebRTCProvider';
 import { Button } from '@/components/ui/button';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface VideoControlsProps {
-  isAudioEnabled: boolean;
-  isVideoEnabled: boolean;
-  onToggleAudio: () => void;
-  onToggleVideo: () => void;
-  onEndCall: () => void; // Changed from endSession to onEndCall
-  onOpenSettings?: (type: 'audio' | 'video') => void; // Optional: for device settings
+  showChat: boolean;
+  onToggleChat: () => void;
 }
 
-
-const VideoControls: React.FC<VideoControlsProps> = ({ 
-  isAudioEnabled, 
-  isVideoEnabled, 
-  onToggleAudio, 
-  onToggleVideo, 
-  onEndCall,
-  onOpenSettings
-}) => {
+const VideoControls: React.FC<VideoControlsProps> = ({ showChat, onToggleChat }) => {
+  const { 
+    sessionType, 
+    isMuted, 
+    isVideoOff, 
+    toggleMute, 
+    toggleVideo, 
+    endCall,
+    callStatus
+  } = useWebRTC();
+  
+  const isConnected = callStatus === 'connected';
+  
   return (
-    <div className="flex justify-center items-center gap-3 sm:gap-4 p-3 bg-[hsl(var(--card)/0.8)] rounded-lg shadow-md mt-4 backdrop-blur-sm">
-      <Button
-        variant={isAudioEnabled ? "outline" : "destructive"}
-        size="icon"
-        onClick={onToggleAudio}
-        className="h-10 w-10 sm:h-12 sm:w-12 rounded-full border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] data-[variant=destructive]:bg-destructive data-[variant=destructive]:text-destructive-foreground"
-        title={isAudioEnabled ? "Mute Microphone" : "Unmute Microphone"}
-      >
-        {isAudioEnabled ? <Mic className="h-5 w-5 sm:h-6 sm:w-6" /> : <MicOff className="h-5 w-5 sm:h-6 sm:w-6" />}
-      </Button>
-
-      <Button
-        variant={isVideoEnabled ? "outline" : "destructive"}
-        size="icon"
-        onClick={onToggleVideo}
-        className="h-10 w-10 sm:h-12 sm:w-12 rounded-full border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] data-[variant=destructive]:bg-destructive data-[variant=destructive]:text-destructive-foreground"
-        title={isVideoEnabled ? "Turn Camera Off" : "Turn Camera On"}
-      >
-        {isVideoEnabled ? <Video className="h-5 w-5 sm:h-6 sm:w-6" /> : <VideoOff className="h-5 w-5 sm:h-6 sm:w-6" />}
-      </Button>
-      
-      {onOpenSettings && (
-         <Button
-            variant="outline"
-            size="icon"
-            onClick={() => onOpenSettings('audio')} // Could be a dropdown for audio/video
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full border-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted)/0.1)]"
-            title="Device Settings"
-        >
-            <Settings className="h-5 w-5 sm:h-6 sm:w-6" />
-        </Button>
-      )}
-
-      <Button
-        variant="destructive"
-        size="icon"
-        onClick={onEndCall} 
-        className="h-10 w-10 sm:h-12 sm:w-12 rounded-full"
-        title="End Session"
-      >
-        <PhoneOff className="h-5 w-5 sm:h-6 sm:w-6" />
-      </Button>
+    <div className="flex items-center justify-center space-x-2 bg-gray-900 bg-opacity-80 p-3 rounded-full">
+      <TooltipProvider>
+        {/* Mute button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={isMuted ? "destructive" : "secondary"}
+              size="icon"
+              onClick={toggleMute}
+              disabled={!isConnected}
+              className="rounded-full h-10 w-10"
+            >
+              {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isMuted ? 'Unmute Microphone' : 'Mute Microphone'}
+          </TooltipContent>
+        </Tooltip>
+        
+        {/* Video toggle button (only for video calls) */}
+        {sessionType === 'video' && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={isVideoOff ? "destructive" : "secondary"}
+                size="icon"
+                onClick={toggleVideo}
+                disabled={!isConnected}
+                className="rounded-full h-10 w-10"
+              >
+                {isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isVideoOff ? 'Turn On Camera' : 'Turn Off Camera'}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        
+        {/* Chat toggle button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={showChat ? "default" : "secondary"}
+              size="icon"
+              onClick={onToggleChat}
+              className="rounded-full h-10 w-10"
+            >
+              <MessageSquare size={20} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {showChat ? 'Hide Chat' : 'Show Chat'}
+          </TooltipContent>
+        </Tooltip>
+        
+        {/* End call button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={endCall}
+              className="rounded-full h-10 w-10"
+            >
+              <PhoneOff size={20} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            End Session
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 };

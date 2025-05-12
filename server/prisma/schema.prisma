@@ -1,0 +1,130 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  READER
+  ADMIN
+}
+
+enum SessionStatus {
+  REQUESTED
+  ACCEPTED
+  STARTED
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          UserRole  @default(CLIENT)
+  bio           String?   @db.Text
+  specialties   String?   @db.Text
+  hourlyRate    Decimal?  @db.Decimal(10, 2)
+  stripeAccountId String?
+  stripeAccountVerified Boolean @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  clientSessions    Session[] @relation("ClientSessions")
+  readerSessions    Session[] @relation("ReaderSessions")
+  sentFeedback      Feedback[] @relation("SentFeedback")
+  receivedFeedback  Feedback[] @relation("ReceivedFeedback")
+  sentGifts         Gift[]     @relation("GiftSender")
+  receivedGifts     Gift[]     @relation("GiftReceiver")
+}
+
+model Session {
+  id              String        @id @default(cuid())
+  status          SessionStatus @default(REQUESTED)
+  startTime       DateTime?
+  endTime         DateTime?
+  duration        Int?          // Duration in minutes
+  totalAmount     Decimal?      @db.Decimal(10, 2)
+  notes           String?       @db.Text
+  recordingUrl    String?
+  sessionType     String?       // 'video', 'audio', or 'chat'
+  
+  // Relations
+  clientId        String
+  client          User          @relation("ClientSessions", fields: [clientId], references: [id])
+  readerId        String
+  reader          User          @relation("ReaderSessions", fields: [readerId], references: [id])
+  feedback        Feedback[]
+  gifts           Gift[]
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([clientId])
+  @@index([readerId])
+}
+
+model Feedback {
+  id          String   @id @default(cuid())
+  rating      Int      // 1-5 star rating
+  comment     String?  @db.Text
+  
+  // Relations
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id])
+  fromUserId  String
+  fromUser    User     @relation("SentFeedback", fields: [fromUserId], references: [id])
+  toUserId    String
+  toUser      User     @relation("ReceivedFeedback", fields: [toUserId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([fromUserId])
+  @@index([toUserId])
+}
+
+model Gift {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(10, 2)
+  message     String?  @db.Text
+  
+  // Relations
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id])
+  fromUserId  String
+  fromUser    User     @relation("GiftSender", fields: [fromUserId], references: [id])
+  toUserId    String
+  toUser      User     @relation("GiftReceiver", fields: [toUserId], references: [id])
+  
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([fromUserId])
+  @@index([toUserId])
+}
+
+model Product {
+  id              String   @id @default(cuid())
+  stripeProductId String   @unique
+  stripePriceId   String?
+  name            String
+  description     String?  @db.Text
+  price           Int      // Price in cents
+  image           String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

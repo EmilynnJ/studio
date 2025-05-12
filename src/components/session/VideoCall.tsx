@@ -1,171 +1,194 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import type { Socket } from 'socket.io-client';
-import WebRTCService from '@/services/webRTCService';
-import StripeBillingService from '@/services/stripeBillingService';
-import type { ChatMessage } from '@/types/session';
-import { useToast } from '@/hooks/use-toast';
+'use client';
+
+import React, { useEffect, useRef } from 'react';
+import { useWebRTC } from './WebRTCProvider';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Mic, MicOff, Video, VideoOff, PhoneOff } from 'lucide-react';
+import ChatInterface from './ChatInterface';
+import SessionInfo from './SessionInfo';
 
 interface VideoCallProps {
-  socket: Socket;
-  readerAccountId: string;
+  sessionId: string;
 }
 
-// Video display component
-const VideoDisplay: React.FC<{ localStream: MediaStream | null; remoteStream: MediaStream | null }> = ({ localStream, remoteStream }) => (
-  <div className="video-container w-full h-auto relative">
-    <div className="flex flex-col sm:flex-row w-full">
-      <video
-        className="local-video w-full sm:w-1/2"
-        autoPlay
-        muted
-        ref={video => { if (video && localStream) video.srcObject = localStream; }}
-      />
-      <video
-        className="remote-video w-full sm:w-1/2"
-        autoPlay
-        ref={video => { if (video && remoteStream) video.srcObject = remoteStream; }}
-      />
-    </div>
-  </div>
-);
-
-// Video controls component
-const VideoControls: React.FC<{ onToggleAudio: (enable: boolean) => void; onToggleVideo: (enable: boolean) => void; onEndCall: () => void }> = ({ onToggleAudio, onToggleVideo, onEndCall }) => {
-  const [audioEnabled, setAudioEnabled] = useState(true);
-  const [videoEnabled, setVideoEnabled] = useState(true);
-
-  return (
-    <div className="controls absolute bottom-0 left-0 right-0 flex justify-evenly py-4 bg-black bg-opacity-50">
-      <button 
-        className="p-3 text-base"
-        onClick={() => { setAudioEnabled(!audioEnabled); onToggleAudio(!audioEnabled); }}>
-        {audioEnabled ? 'Mute' : 'Unmute'}
-      </button>
-      <button 
-        className="p-3 text-base"
-        onClick={() => { setVideoEnabled(!videoEnabled); onToggleVideo(!videoEnabled); }}>
-        {videoEnabled ? 'Stop Video' : 'Start Video'}
-      </button>
-      <button 
-        className="end-call text-red-600 p-3 text-base" 
-        onClick={onEndCall}>End Call</button>
-    </div>
-  );
-};
-
-// Chat interface component
-const ChatInterface: React.FC<{ messages: ChatMessage[]; onSend: (msg: Omit<ChatMessage, 'id' | 'isOwn'>) => void }> = ({ messages, onSend }) => {
-  const [input, setInput] = useState('');
-  const handleSend = () => {
-    if (!input.trim()) return;
-    onSend({ senderUid: '', senderName: '', text: input, timestamp: Date.now() });
-    setInput('');
-  };
-
-  return (
-    <div className="chat flex flex-col">
-      <div className="messages overflow-auto flex-1">
-        {messages.map(m => (
-          <div key={m.id} className={m.isOwn ? 'own-message' : 'peer-message'}>
-            <strong>{m.senderName}:</strong> {m.text}
-          </div>
-        ))}
-      </div>
-      <div className="chat-input flex mt-2">
-        <input
-          className="flex-1 border p-2"
-          type="text"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSend()}
-        />
-        <button className="ml-2" onClick={handleSend}>Send</button>
-      </div>
-    </div>
-  );
-};
-
-// Main VideoCall component
-const VideoCall: React.FC<VideoCallProps> = ({ socket, readerAccountId }) => {
-  const toast = useToast();
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-
-  const webRTCServiceRef = useRef<WebRTCService | null>(null);
-  const billingServiceRef = useRef<StripeBillingService | null>(null);
-
+const VideoCall: React.FC<VideoCallProps> = ({ sessionId }) => {
+  const { 
+    localStream, 
+    remoteStream, 
+    callStatus, 
+    sessionType,
+    isMuted,
+    isVideoOff,
+    toggleMute,
+    toggleVideo,
+    endCall,
+    billingStatus
+  } = useWebRTC();
+  
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  
+  // Set up local video stream
   useEffect(() => {
-    const roomId = uuidv4();
-    const webrtc = new WebRTCService(socket);
-    const billing = new StripeBillingService();
-
-    webRTCServiceRef.current = webrtc;
-    billingServiceRef.current = billing;
-
-    // Initialize billing with reader's Stripe Connect account
-    billing.initialize({
-      readerId: readerAccountId,
-      clientId: '',
-      sessionId: roomId,
-      ratePerMinute: 1,
-      clientBalance: 100,
-      readerAccountId,
-    });
-
-    billing.onBalanceUpdate(status => {
-      toast({ title: 'Billing Update', description: `Remaining minutes: ${status.remainingMinutes}`, });
-    });
-
-    billing.onSessionEnd(data => {
-      toast({ variant: 'destructive', title: 'Session Ended', description: `Reason: ${data.reason}` });
-      webrtc.disconnect();
-    });
-
-    // Listen for pause/resume from WebRTCService signaling
-    socket.on('pause-billing', () => billing.pauseBilling());
-    socket.on('resume-billing', () => billing.resumeBilling());
-
-    // Setup chat handlers
-    webrtc.setupChatHandlers(setMessages, toast);
-
-    // Initialize WebRTC
-    webrtc.onRemoteStream(stream => setRemoteStream(stream));
-    webrtc.onConnectionStateChange(state => {
-      if (state === 'connected') billing.startBilling();
-    });
-    webrtc.initialize(roomId, true)
-      .then(stream => setLocalStream(stream))
-      .catch(err => toast({ variant: 'destructive', title: 'WebRTC Error', description: err.message }));
-
-    return () => {
-      socket.off('pause-billing');
-      socket.off('resume-billing');
-      webrtc.disconnect();
-      billing.endBilling('user_left');
-    };
-  }, [socket, readerAccountId, toast]);
-
-  const handleSendMessage = (msg: Omit<ChatMessage, 'id' | 'isOwn'>) => {
-    const success = webRTCServiceRef.current?.sendChatMessage(msg);
-    if (!success) toast({ variant: 'destructive', title: 'Send Failed', description: 'Could not send chat message.' });
+    if (localVideoRef.current && localStream && sessionType === 'video' && !isVideoOff) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream, sessionType, isVideoOff]);
+  
+  // Set up remote video stream
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
+  
+  // Render different UI based on call status
+  const renderCallStatus = () => {
+    switch (callStatus) {
+      case 'idle':
+        return <div className="text-center">Call not initialized</div>;
+      case 'loading_session':
+        return <div className="text-center">Loading session...</div>;
+      case 'waiting_permission':
+        return <div className="text-center">Waiting for camera/microphone permission...</div>;
+      case 'permission_granted':
+        return <div className="text-center">Permission granted, connecting...</div>;
+      case 'connecting':
+        return <div className="text-center">Connecting to peer...</div>;
+      case 'disconnected':
+        return <div className="text-center">Connection lost. Attempting to reconnect...</div>;
+      case 'error':
+        return <div className="text-center text-red-500">Error connecting to peer</div>;
+      case 'ended':
+        return <div className="text-center">Call ended</div>;
+      default:
+        return null;
+    }
   };
-
-  const handleToggleAudio = (enable: boolean) => webRTCServiceRef.current?.toggleAudio(enable);
-  const handleToggleVideo = (enable: boolean) => webRTCServiceRef.current?.toggleVideo(enable);
-  const handleEndCall = () => {
-    webRTCServiceRef.current?.disconnect();
-    billingServiceRef.current?.endBilling('ended_by_user');
-  };
-
+  
   return (
-    <div className="video-call flex flex-col h-full">
-      <div className="relative">
-        <VideoDisplay localStream={localStream} remoteStream={remoteStream} />
-        <VideoControls onToggleAudio={handleToggleAudio} onToggleVideo={handleToggleVideo} onEndCall={handleEndCall} />
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
+      <div className="md:col-span-2">
+        <Card className="h-full flex flex-col">
+          <div className="flex-grow relative">
+            {/* Remote Video (Main) */}
+            {sessionType === 'video' && (
+              <div className="w-full h-full bg-black rounded-t-lg overflow-hidden">
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+                
+                {/* Call status overlay */}
+                {callStatus !== 'connected' && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white">
+                    {renderCallStatus()}
+                  </div>
+                )}
+                
+                {/* Local Video (Picture-in-Picture) */}
+                <div className="absolute bottom-4 right-4 w-1/4 h-1/4 bg-gray-900 rounded-lg overflow-hidden border-2 border-white">
+                  {isVideoOff ? (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
+                      <VideoOff size={24} />
+                    </div>
+                  ) : (
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* Audio-only UI */}
+            {sessionType === 'audio' && (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900 to-pink-700 rounded-t-lg">
+                <div className="text-center text-white">
+                  <div className="text-2xl font-bold mb-4">Audio Call</div>
+                  {callStatus !== 'connected' ? (
+                    renderCallStatus()
+                  ) : (
+                    <div className="animate-pulse">
+                      <div className="flex items-center justify-center space-x-2">
+                        <div className="w-3 h-3 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-3 h-3 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-3 h-3 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* Chat-only UI */}
+            {sessionType === 'chat' && (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-900 to-purple-700 rounded-t-lg">
+                <div className="text-center text-white">
+                  <div className="text-2xl font-bold mb-4">Chat Session</div>
+                  {callStatus !== 'connected' ? (
+                    renderCallStatus()
+                  ) : (
+                    <div>Connected - Use the chat panel to communicate</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Controls */}
+          <div className="p-4 flex items-center justify-between bg-gray-100 rounded-b-lg">
+            <SessionInfo />
+            
+            <div className="flex items-center space-x-4">
+              {/* Mute button */}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={toggleMute}
+                disabled={callStatus !== 'connected'}
+                className={isMuted ? 'bg-red-100' : ''}
+              >
+                {isMuted ? <MicOff /> : <Mic />}
+              </Button>
+              
+              {/* Video toggle button (only for video calls) */}
+              {sessionType === 'video' && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={toggleVideo}
+                  disabled={callStatus !== 'connected'}
+                  className={isVideoOff ? 'bg-red-100' : ''}
+                >
+                  {isVideoOff ? <VideoOff /> : <Video />}
+                </Button>
+              )}
+              
+              {/* End call button */}
+              <Button
+                variant="destructive"
+                size="icon"
+                onClick={endCall}
+              >
+                <PhoneOff />
+              </Button>
+            </div>
+          </div>
+        </Card>
       </div>
-      <ChatInterface messages={messages} onSend={handleSendMessage} />
+      
+      {/* Chat panel */}
+      <div className="md:col-span-1">
+        <ChatInterface />
+      </div>
     </div>
   );
 };

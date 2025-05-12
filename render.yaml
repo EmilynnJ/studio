@@ -1,0 +1,96 @@
+services:
+  # Frontend Next.js application
+  - type: web
+    name: soulseer-frontend
+    env: node
+    plan: standard
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_FIREBASE_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_DATABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_APP_ID
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+        sync: false
+      - key: NEXT_PUBLIC_STRIPE_PUBLIC_KEY
+        sync: false
+      - key: NEXT_PUBLIC_SIGNALING_SERVER_URL
+        fromService:
+          name: soulseer-signaling
+          type: web
+          property: url
+      - key: NEXT_PUBLIC_WEBRTC_ICE_SERVERS
+        value: '[{"urls":"stun:stun.l.google.com:19302"},{"urls":"stun:stun1.l.google.com:19302"}]'
+      - key: NEXT_PUBLIC_WEBRTC_TURN_SERVERS
+        sync: false
+
+  # WebRTC Signaling Server
+  - type: web
+    name: soulseer-signaling
+    env: node
+    plan: standard
+    buildCommand: cd server && npm ci
+    startCommand: cd server && node index.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: FIREBASE_API_KEY
+        sync: false
+      - key: FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: FIREBASE_DATABASE_URL
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: FIREBASE_APP_ID
+        sync: false
+      - key: FIREBASE_MEASUREMENT_ID
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_KEY
+        sync: false
+      - key: FIREBASE_DATABASE_SECRET
+        sync: false
+      - key: STRIPE_PUBLIC_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SIGNING_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGIN
+        fromService:
+          name: soulseer-frontend
+          type: web
+          property: url
+      - key: WEBRTC_ICE_SERVERS
+        value: '[{"urls":"stun:stun.l.google.com:19302"},{"urls":"stun:stun1.l.google.com:19302"}]'
+      - key: WEBRTC_TURN_SERVERS
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+      - key: REDIS_URL
+        sync: false

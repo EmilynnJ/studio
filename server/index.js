@@ -1,138 +1,126 @@
+// server/index.js
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
+const { PrismaClient } = require('@prisma/client');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const apiRoutes = require('./routes/api');
+const { createSocketServer } = require('./socket');
 
+const prisma = new PrismaClient();
 const app = express();
-app.use(cors());
-
 const server = http.createServer(app);
 
+// Configure CORS for both Express and Socket.IO
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' 
+    ? ['https://soulseer.com', 'https://www.soulseer.com'] 
+    : ['http://localhost:3000']),
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+app.use(express.json());
+
+// Initialize Socket.IO with CORS settings
 const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
+  cors: corsOptions
 });
 
-// In-memory store of clients in each room
-const roomClients = {};
+// Set up socket server
+createSocketServer(io, prisma);
 
-io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+// API routes
+app.use('/api', apiRoutes);
 
-  // Join a room
-  socket.on('join-room', (roomId) => {
-    socket.join(roomId);
-    if (!roomClients[roomId]) {
-      roomClients[roomId] = new Set();
-    }
-    roomClients[roomId].add(socket.id);
-    console.log(`Socket ${socket.id} joined room ${roomId}`);
-    io.to(roomId).emit('room-clients', Array.from(roomClients[roomId]));
-  });
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
 
-  // Leave a room
-  socket.on('leave-room', (roomId) => {
-    socket.leave(roomId);
-    if (roomClients[roomId]) {
-      roomClients[roomId].delete(socket.id);
-      if (roomClients[roomId].size === 0) {
-        delete roomClients[roomId];
-      } else {
-        io.to(roomId).emit('room-clients', Array.from(roomClients[roomId]));
-      }
-    }
-    console.log(`Socket ${socket.id} left room ${roomId}`);
-  });
-
-  // WebRTC signaling
-  socket.on('offer', (data) => {
-    const { roomId, offer, target } = data;
-    socket.to(roomId).emit('offer', { offer, from: socket.id, target });
-  });
-
-  socket.on('answer', (data) => {
-    const { roomId, answer, target } = data;
-    socket.to(roomId).emit('answer', { answer, from: socket.id, target });
-  });
-
-  socket.on('ice-candidate', (data) => {
-    const { roomId, candidate, target } = data;
-    socket.to(roomId).emit('ice-candidate', { candidate, from: socket.id, target });
-  });
-
-  // Session request/accept flows
-  socket.on('session-request', (data) => {
-    const { roomId, requestDetails, target } = data;
-    socket.to(roomId).emit('session-request', { requestDetails, from: socket.id, target });
-    console.log(`Session request in room ${roomId} from ${socket.id} to ${target}`);
-  });
-
-  socket.on('session-accepted', (data) => {
-    const { roomId, acceptDetails, target } = data;
-    socket.to(roomId).emit('session-accepted', { acceptDetails, from: socket.id, target });
-    console.log(`Session accepted in room ${roomId} from ${socket.id} to ${target}`);
-  });
-
-  // Billing events
-  socket.on('billing-update', (data) => {
-    const { roomId, billingDetails, target } = data;
-    socket.to(roomId).emit('billing-update', { billingDetails, from: socket.id, target });
-    console.log(`Billing update in room ${roomId}:`, billingDetails);
-  });
-
-  socket.on('pause-billing', (data) => {
-    const { roomId, pauseDetails, target } = data;
-    socket.to(roomId).emit('pause-billing', { pauseDetails, from: socket.id, target });
-    console.log(`Billing paused in room ${roomId} by ${socket.id}`);
-  });
-
-  socket.on('resume-billing', (data) => {
-    const { roomId, resumeDetails, target } = data;
-    socket.to(roomId).emit('resume-billing', { resumeDetails, from: socket.id, target });
-    console.log(`Billing resumed in room ${roomId} by ${socket.id}`);
-  });
-
-  // Chat messaging
-  socket.on('chat-message', (data) => {
-    const { roomId, message } = data;
-    io.to(roomId).emit('chat-message', { message, from: socket.id });
-  });
-
-  // Live gifting
-  socket.on('gift-sent', (data) => {
-    const { roomId, giftDetails, target } = data;
-    io.to(roomId).emit('gift-sent', { giftDetails, from: socket.id, target });
-    console.log(`Gift sent in room ${roomId} from ${socket.id} to ${target}:`, giftDetails);
-  });
-
-  // Handle disconnection
-  socket.on('disconnecting', () => {
-    socket.rooms.forEach((roomId) => {
-      if (roomClients[roomId]) {
-        roomClients[roomId].delete(socket.id);
-        if (roomClients[roomId].size === 0) {
-          delete roomClients[roomId];
-        } else {
-          io.to(roomId).emit('room-clients', Array.from(roomClients[roomId]));
+// Stripe webhook endpoint
+app.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SIGNING_SECRET;
+  
+  let event;
+  
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error(`Webhook Error: ${err.message}`);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+  
+  // Handle the event
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      const paymentIntent = event.data.object;
+      console.log('PaymentIntent was successful:', paymentIntent.id);
+      
+      // If this payment is for a session, update the session record
+      if (paymentIntent.metadata && paymentIntent.metadata.sessionId) {
+        try {
+          await prisma.session.update({
+            where: { id: paymentIntent.metadata.sessionId },
+            data: {
+              status: 'COMPLETED',
+              totalAmount: `${(paymentIntent.amount) / 100}`,
+            },
+          });
+        } catch (error) {
+          console.error('Error updating session:', error);
         }
       }
-    });
-    console.log('Client disconnecting:', socket.id);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
+      break;
+      
+    case 'payment_method.attached':
+      const paymentMethod = event.data.object;
+      console.log('PaymentMethod was attached:', paymentMethod.id);
+      break;
+      
+    case 'account.updated':
+      const account = event.data.object;
+      console.log('Stripe Connect account updated:', account.id);
+      
+      // If this is a reader's account that has been updated, update their status
+      try {
+        const user = await prisma.user.findFirst({
+          where: { stripeAccountId: account.id }
+        });
+        
+        if (user) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              stripeAccountVerified: account.charges_enabled
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error updating user stripe verification status:', error);
+      }
+      break;
+      
+    default:
+      console.log(`Unhandled event type ${event.type}`);
+  }
+  
+  res.status(200).json({ received: true });
 });
 
-// Health check route
-app.get('/', (req, res) => {
-  res.send('Socket server is running.');
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 4000;
+// Start the server
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });

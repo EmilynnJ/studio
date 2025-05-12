@@ -1,4 +1,3 @@
-
 import type { Timestamp } from 'firebase/firestore';
 import type { AppUser } from './user';
 
@@ -42,6 +41,10 @@ export interface ChatMessage {
   isOwn: boolean; // For UI differentiation, determined client-side
 }
 
-export interface OpponentInfo extends Pick<AppUser, 'name' | 'uid' | 'photoURL'> {}
-
-
+export interface OpponentInfo {
+  uid: string;
+  name: string;
+  profileImage?: string | null;
+  ratePerMinute?: number;
+  stripeAccountId?: string;
+}
