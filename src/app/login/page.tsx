@@ -62,52 +62,41 @@ export default function LoginPage() {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
             const userDocRef = doc(db, 'users', user.uid);
-            const userDoc = await getDoc(userDocRef);
             
-            if (!userDoc.exists()) {
-              // Create admin user document
-              await setDoc(userDocRef, {
-                uid: user.uid,
-                email: email,
-                name: 'Admin User',
-                role: 'admin',
-                createdAt: new Date(),
-                updatedAt: new Date()
-              });
-              
-              toast({
-                title: "Admin Setup Complete",
-                description: "Your admin account has been configured.",
-                variant: "default",
-              });
-            } else if (userDoc.data().role !== 'admin') {
-              // Update role to admin if not already
-              await setDoc(userDocRef, {
-                ...userDoc.data(),
-                role: 'admin',
-                updatedAt: new Date()
-              }, { merge: true });
-              
-              toast({
-                title: "Admin Role Updated",
-                description: "Your account has been granted admin privileges.",
-                variant: "default",
-              });
-            }
+            // Force admin role without checking if document exists
+            await setDoc(userDocRef, {
+              uid: user.uid,
+              email: email,
+              name: 'Admin User',
+              role: 'admin',
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }, { merge: true });
             
-            router.push('/admin');
-          } catch (error) {
+            toast({
+              title: "Admin Setup Complete",
+              description: "Your admin account has been configured.",
+              variant: "default",
+            });
+            
+            // Force redirect to admin page
+            window.location.href = '/admin';
+          } catch (error: any) {
             console.error("Admin setup error:", error);
+            toast({
+              title: "Admin Setup Error",
+              description: error.message || "Failed to set up admin account",
+              variant: "destructive",
+            });
           }
         } else {
           router.push('/'); // Redirect to homepage on successful login
-          router.refresh(); // Refresh to update auth state in the UI
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Something went wrong",
-        description: "Please try again later.",
+        description: error.message || "Please try again later.",
         variant: "destructive",
       });
       console.error("Login error:", error);

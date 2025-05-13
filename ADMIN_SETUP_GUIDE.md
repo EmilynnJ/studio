@@ -1,72 +1,96 @@
 # SoulSeer Admin Setup Guide
 
-This guide will help you set up the admin account for the SoulSeer application.
+This guide provides multiple methods to set up your admin account for the SoulSeer application.
 
-## Method 1: Using the Firebase Console
+## Method 1: Direct Admin Setup Page (Recommended)
+
+1. Navigate to `/admin-direct-setup` in your browser
+2. The page will automatically attempt to create or update the admin account
+3. You will see a success message when the setup is complete
+4. Click the button to go to the admin dashboard
+
+## Method 2: Using the Login Page
+
+1. Navigate to the login page at `/login`
+2. The login form should be pre-filled with the admin credentials:
+   - Email: `emilynn992@gmail.com`
+   - Password: `JayJas1423!`
+3. Click "Complete Admin Setup" to create your admin account
+4. You will be redirected to the admin dashboard
+
+## Method 3: Using the API Directly
+
+You can also set up the admin account by making a GET request to the admin setup API:
+
+```
+GET /api/admin/direct-setup
+```
+
+This will create the admin account or update an existing account with admin privileges.
+
+## Method 4: Using the Firebase Console
+
+If all else fails, you can manually set up the admin account:
 
 1. Go to the [Firebase Console](https://console.firebase.google.com/)
 2. Select your project: `soulseer-2c4ed`
 3. Navigate to Authentication > Users
-4. Create a new user with the following credentials:
+4. Click "Add User"
+5. Enter the admin email and password:
    - Email: `emilynn992@gmail.com`
    - Password: `JayJas1423!`
-5. Copy the User UID that is generated
-6. Navigate to Firestore Database
-7. Create a new document in the `users` collection with the ID matching the User UID
-8. Add the following fields to the document:
-   ```
-   uid: [User UID]
-   email: "emilynn992@gmail.com"
-   name: "Admin User"
-   role: "admin"
-   createdAt: [Current timestamp]
-   updatedAt: [Current timestamp]
-   ```
-9. Save the document
+6. Copy the User UID that is generated
+7. Navigate to Firestore Database
+8. Create a collection named `users` if it doesn't exist
+9. Add a new document with the ID matching the User UID from step 6
+10. Add the following fields:
+    ```
+    uid: [User UID]
+    email: "emilynn992@gmail.com"
+    name: "Admin User"
+    role: "admin"
+    createdAt: [Current timestamp]
+    updatedAt: [Current timestamp]
+    ```
 
-## Method 2: Using the Admin Setup Page
+## Troubleshooting
 
-1. Start the application:
-   ```
-   npm run dev
-   ```
-2. Navigate to `/admin-setup` in your browser
-3. Click the "Set Up Admin Account" button
-4. You will be redirected to the admin dashboard if successful
+If you encounter the "Missing or insufficient permissions" error:
 
-## Method 3: Using the Direct Initialization Script
+1. This is a Firebase security rules issue
+2. Try using the `/admin-direct-setup` page which has been optimized to work with restrictive security rules
+3. If that doesn't work, you may need to temporarily update your Firebase security rules to allow the admin setup
 
-If you encounter permission issues with the direct script, make sure your Firebase rules allow write access:
+### Temporary Firebase Rules for Setup
 
-1. Go to the Firebase Console
-2. Navigate to Firestore Database > Rules
-3. Update the rules to allow write access temporarily:
-   ```
-   rules_version = '2';
-   service cloud.firestore {
-     match /databases/{database}/documents {
-       match /{document=**} {
-         allow read, write: if true;
-       }
-     }
-   }
-   ```
-4. Run the initialization script:
-   ```
-   node scripts/direct-init-admin.js
-   ```
-5. After successful setup, revert the rules to a more secure configuration
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
 
-## Verifying Admin Setup
+After setting up the admin account, revert to more secure rules:
 
-1. Log in to the application with your admin credentials
-2. Navigate to `/admin` to access the admin dashboard
-3. You should see options to manage readers, products, and view analytics
-
-## Security Note
-
-After setting up the admin account, make sure to:
-
-1. Remove the admin credentials from `.env.local` if you used Method 2
-2. Secure your Firestore rules to prevent unauthorized access
-3. Consider changing the admin password through the Firebase Console
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow admin users full access
+    match /{document=**} {
+      allow read, write: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Public user profiles
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+```

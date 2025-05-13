@@ -1,24 +1,32 @@
-import type { SVGProps } from 'react';
+import React from 'react';
 
-export function CelestialIcon(props: SVGProps<SVGSVGElement>) {
+interface CelestialIconProps {
+  className?: string;
+}
+
+export function CelestialIcon({ className }: CelestialIconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      {...props}
+      className={className}
     >
-      <path d="M12 2l2.5 5.5L20 9l-4.5 4L17 18.5 12 16l-5 2.5L8.5 13 4 9l5.5-1.5L12 2z" />
-      <path d="M12 2v20" />
-      <path d="M2 12h20" />
-      <path d="M5 5l14 14" />
-      <path d="M5 19l14-14" />
+      <circle cx="12" cy="12" r="5" />
+      <path d="M12 1v2" />
+      <path d="M12 21v2" />
+      <path d="M4.22 4.22l1.42 1.42" />
+      <path d="M18.36 18.36l1.42 1.42" />
+      <path d="M1 12h2" />
+      <path d="M21 12h2" />
+      <path d="M4.22 19.78l1.42-1.42" />
+      <path d="M18.36 5.64l1.42-1.42" />
+      <path d="M21 16l-4-4 4-4" />
+      <path d="M3 8l4 4-4 4" />
     </svg>
   );
 }
