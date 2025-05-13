@@ -1,104 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/firebase';
+import { auth } from '@/lib/firebase/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CelestialIcon } from '@/components/icons/celestial-icon';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/auth-context';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isAdminSetup, setIsAdminSetup] = useState(false);
   const router = useRouter();
-  const { toast } = useToast();
-  const { login, currentUser } = useAuth();
-
-  // Pre-fill admin credentials if they match the environment variables
-  useEffect(() => {
-    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || process.env.ADMIN_EMAIL;
-    if (adminEmail === 'emilynn992@gmail.com') {
-      setEmail('emilynn992@gmail.com');
-      setPassword('JayJas1423!');
-      setIsAdminSetup(true);
-    }
-  }, []);
-
-  // Redirect if already logged in
-  useEffect(() => {
-    if (currentUser) {
-      if (currentUser.role === 'admin') {
-        router.push('/admin');
-      } else if (currentUser.role === 'reader') {
-        router.push('/reader-dashboard');
-      } else {
-        router.push('/');
-      }
-    }
-  }, [currentUser, router]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
     
     try {
-      // Use the auth context login function
-      const success = await login(email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
-      if (success) {
-        // If this is the admin email and we're setting up the admin account
-        if (isAdminSetup && email === 'emilynn992@gmail.com') {
-          try {
-            // Check if user exists in Firestore and has admin role
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-            const userDocRef = doc(db, 'users', user.uid);
-            
-            // Force admin role without checking if document exists
-            await setDoc(userDocRef, {
-              uid: user.uid,
-              email: email,
-              name: 'Admin User',
-              role: 'admin',
-              createdAt: new Date(),
-              updatedAt: new Date()
-            }, { merge: true });
-            
-            toast({
-              title: "Admin Setup Complete",
-              description: "Your admin account has been configured.",
-              variant: "default",
-            });
-            
-            // Force redirect to admin page
-            window.location.href = '/admin';
-          } catch (error: any) {
-            console.error("Admin setup error:", error);
-            toast({
-              title: "Admin Setup Error",
-              description: error.message || "Failed to set up admin account",
-              variant: "destructive",
-            });
-          }
-        } else {
-          router.push('/'); // Redirect to homepage on successful login
-        }
+      if (userCredential.user) {
+        router.push('/'); // Redirect to homepage on successful login
       }
     } catch (error: any) {
-      toast({
-        title: "Something went wrong",
-        description: error.message || "Please try again later.",
-        variant: "destructive",
-      });
+      alert("Login failed: " + (error.message || "Please try again later."));
       console.error("Login error:", error);
     } finally {
       setIsLoading(false);
@@ -113,10 +43,10 @@ export default function LoginPage() {
             <CelestialIcon className="h-16 w-16 text-[hsl(var(--soulseer-header-pink))]" />
           </div>
           <CardTitle className="text-4xl font-alex-brush text-[hsl(var(--soulseer-header-pink))]">
-            {isAdminSetup ? 'Admin Login' : 'Login to SoulSeer'}
+            Login to SoulSeer
           </CardTitle>
           <CardDescription className="font-playfair-display text-muted-foreground">
-            {isAdminSetup ? 'Complete your admin setup' : 'Access your spiritual journey.'}
+            Access your spiritual journey.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -131,7 +61,7 @@ export default function LoginPage() {
                 className="bg-input text-foreground placeholder:text-muted-foreground"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading || isAdminSetup}
+                disabled={isLoading}
               />
             </div>
             <div className="space-y-2">
@@ -144,7 +74,7 @@ export default function LoginPage() {
                 className="bg-input text-foreground placeholder:text-muted-foreground"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading || isAdminSetup}
+                disabled={isLoading}
               />
             </div>
             <Button 
@@ -158,29 +88,27 @@ export default function LoginPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  {isAdminSetup ? 'Setting up admin...' : 'Entering...'}
+                  Entering...
                 </span> : 
-                (isAdminSetup ? 'Complete Admin Setup' : 'Enter the Portal')
+                'Enter the Portal'
               }
             </Button>
           </form>
         </CardContent>
-        {!isAdminSetup && (
-          <CardFooter className="flex flex-col items-center space-y-2">
-            <Link 
-              href="/forgot-password" 
-              className="text-sm font-playfair-display text-[hsl(var(--primary))] hover:underline"
-            >
-              Forgot your password?
+        <CardFooter className="flex flex-col items-center space-y-2">
+          <Link 
+            href="/forgot-password" 
+            className="text-sm font-playfair-display text-[hsl(var(--primary))] hover:underline"
+          >
+            Forgot your password?
+          </Link>
+          <p className="text-sm font-playfair-display text-muted-foreground">
+            Don&apos;t have an account?{' '}
+            <Link href="/signup" className="font-semibold text-[hsl(var(--primary))] hover:underline">
+              Sign Up
             </Link>
-            <p className="text-sm font-playfair-display text-muted-foreground">
-              Don&apos;t have an account?{' '}
-              <Link href="/signup" className="font-semibold text-[hsl(var(--primary))] hover:underline">
-                Sign Up
-              </Link>
-            </p>
-          </CardFooter>
-        )}
+          </p>
+        </CardFooter>
       </Card>
     </div>
   );
