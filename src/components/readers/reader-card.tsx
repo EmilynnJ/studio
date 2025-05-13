@@ -5,15 +5,34 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
-import { AppUser } from '@/types/user';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/auth-context';
 
-interface ReaderCardProps {
-  reader: AppUser;
-  onRequestReading: () => void;
-  isLoggedIn: boolean;
+// Define the reader type to match what's used in the homepage
+interface Reader {
+  id: string;
+  name: string;
+  specialties: string;
+  rating: number;
+  imageUrl: string;
+  status: 'online' | 'offline' | 'busy';
+  shortBio: string;
+  dataAiHint?: string;
+  sessionType?: 'video' | 'chat' | 'voice';
+  photoURL?: string;
+  bio?: string;
+  ratePerMinute?: number;
 }
 
-const ReaderCard: React.FC<ReaderCardProps> = ({ reader, onRequestReading, isLoggedIn }) => {
+interface ReaderCardProps {
+  reader: Reader;
+}
+
+export function ReaderCard({ reader }: ReaderCardProps) {
+  const router = useRouter();
+  const { currentUser } = useAuth();
+  const isLoggedIn = !!currentUser;
+  
   // Get status badge color
   const getStatusBadge = () => {
     switch (reader.status) {
@@ -43,6 +62,15 @@ const ReaderCard: React.FC<ReaderCardProps> = ({ reader, onRequestReading, isLog
       .map(s => s.trim())
       .filter(s => s.length > 0);
   };
+
+  const handleRequestReading = () => {
+    if (!isLoggedIn) {
+      router.push('/login');
+      return;
+    }
+    
+    router.push(`/request-reading/${reader.id}`);
+  };
   
   return (
     <Card className="overflow-hidden h-full flex flex-col">
@@ -53,8 +81,8 @@ const ReaderCard: React.FC<ReaderCardProps> = ({ reader, onRequestReading, isLog
         {/* Avatar */}
         <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2">
           <Avatar className="h-20 w-20 border-4 border-white">
-            {reader.photoURL ? (
-              <img src={reader.photoURL} alt={reader.name || ''} />
+            {reader.photoURL || reader.imageUrl ? (
+              <img src={reader.photoURL || reader.imageUrl} alt={reader.name || ''} />
             ) : (
               <div className="bg-primary text-white flex items-center justify-center h-full w-full text-xl">
                 {reader.name?.charAt(0) || 'R'}
@@ -70,13 +98,13 @@ const ReaderCard: React.FC<ReaderCardProps> = ({ reader, onRequestReading, isLog
           {getStatusBadge()}
         </div>
         <p className="text-sm text-gray-500">
-          ${reader.ratePerMinute}/minute
+          ${reader.ratePerMinute || 5}/minute
         </p>
       </CardHeader>
       
       <CardContent className="flex-grow">
         <p className="text-sm mb-4">
-          {truncate(reader.bio, 150)}
+          {truncate(reader.bio || reader.shortBio, 150)}
         </p>
         
         {reader.specialties && (
@@ -98,7 +126,7 @@ const ReaderCard: React.FC<ReaderCardProps> = ({ reader, onRequestReading, isLog
       <CardFooter>
         <Button 
           className="w-full" 
-          onClick={onRequestReading}
+          onClick={handleRequestReading}
           disabled={reader.status !== 'online' || !isLoggedIn}
         >
           {!isLoggedIn ? 'Login to Request' : 
@@ -107,6 +135,4 @@ const ReaderCard: React.FC<ReaderCardProps> = ({ reader, onRequestReading, isLog
       </CardFooter>
     </Card>
   );
-};
-
-export default ReaderCard;
+}

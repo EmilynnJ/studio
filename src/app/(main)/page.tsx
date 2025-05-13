@@ -1,4 +1,3 @@
-
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -10,8 +9,8 @@ import { ProductCard, type Product } from '@/components/shop/product-card';
 
 // Placeholder data - in a real app, this would come from a backend/CMS
 const featuredReaders = [
-  { id: '1', name: 'Mysteria Moon', specialties: 'Tarot, Crystal Ball', rating: 4.9, imageUrl: 'https://picsum.photos/seed/mysteria/400/300', status: 'online' as const, shortBio: 'Guiding souls through the veil with ancient wisdom and intuitive insights.', dataAiHint: 'mystic woman oracle', sessionType: 'video' as const},
-  { id: '2', name: 'Orion Stargazer', specialties: 'Astrology, Numerology', rating: 4.8, imageUrl: 'https://picsum.photos/seed/orion/400/300', status: 'offline' as const, shortBio: 'Unveiling cosmic blueprints and life path numbers for clarity and direction.', dataAiHint: 'celestial wizard', sessionType: 'chat' as const },
+  { id: '1', name: 'Mysteria Moon', specialties: 'Tarot, Crystal Ball', rating: 4.9, imageUrl: 'https://picsum.photos/seed/mysteria/400/300', status: 'online' as const, shortBio: 'Guiding souls through the veil with ancient wisdom and intuitive insights.', dataAiHint: 'mystic woman oracle', sessionType: 'video' as const, ratePerMinute: 5},
+  { id: '2', name: 'Orion Stargazer', specialties: 'Astrology, Numerology', rating: 4.8, imageUrl: 'https://picsum.photos/seed/orion/400/300', status: 'offline' as const, shortBio: 'Unveiling cosmic blueprints and life path numbers for clarity and direction.', dataAiHint: 'celestial wizard', sessionType: 'chat' as const, ratePerMinute: 4.5 },
 ];
 
 const featuredProducts: Product[] = [
@@ -174,4 +173,3 @@ export default function HomePage() {
     </div>
   );
 }
-

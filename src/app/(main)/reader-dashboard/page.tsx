@@ -8,12 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ReaderDashboard() {
   const { currentUser, loading, updateUserStatus } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
+  
   const [sessions, setSessions] = useState<any[]>([]);
   const [earnings, setEarnings] = useState({
     total: 0,
@@ -31,10 +34,15 @@ export default function ReaderDashboard() {
       } else {
         setIsOnline(currentUser.status === 'online');
         fetchSessions();
-        calculateEarnings();
       }
     }
   }, [currentUser, loading, router]);
+
+  useEffect(() => {
+    if (sessions.length > 0) {
+      calculateEarnings();
+    }
+  }, [sessions]);
 
   const fetchSessions = async () => {
     if (!currentUser) return;
@@ -55,17 +63,21 @@ export default function ReaderDashboard() {
       setSessions(sessionsList);
     } catch (error) {
       console.error('Error fetching sessions:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to load your sessions. Please try again.'
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const calculateEarnings = async () => {
+  const calculateEarnings = () => {
     if (!currentUser) return;
     
     try {
-      // In a real app, you might want to fetch this from a separate earnings collection
-      // This is a simplified version that calculates from sessions
+      // Calculate from completed sessions
       const completedSessions = sessions.filter(session => 
         session.status === 'ended' && session.amountCharged
       );
@@ -137,10 +149,50 @@ export default function ReaderDashboard() {
     
     try {
       await updateUserStatus(currentUser.uid, newStatus);
+      toast({
+        title: 'Status Updated',
+        description: `You are now ${newStatus}.`
+      });
     } catch (error) {
       console.error('Error updating status:', error);
       // Revert UI state if update fails
       setIsOnline(isOnline);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to update your status. Please try again.'
+      });
+    }
+  };
+
+  const handleAcceptSession = async (sessionId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      // Update session status in Firestore
+      const sessionRef = doc(db, 'videoSessions', sessionId);
+      await updateDoc(sessionRef, {
+        status: 'accepted_by_reader'
+      });
+      
+      // Update local state
+      setSessions(sessions.map(session => 
+        session.id === sessionId 
+          ? { ...session, status: 'accepted_by_reader' } 
+          : session
+      ));
+      
+      toast({
+        title: 'Session Accepted',
+        description: 'You have accepted the reading request.'
+      });
+    } catch (error) {
+      console.error('Error accepting session:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to accept the session. Please try again.'
+      });
     }
   };
 
@@ -159,7 +211,7 @@ export default function ReaderDashboard() {
               checked={isOnline} 
               onCheckedChange={handleStatusToggle} 
             />
-            <Label htmlFor="status-toggle">
+            <Label htmlFor="status-toggle" className={isOnline ? "text-green-600 font-medium" : "text-gray-500"}>
               {isOnline ? 'Online' : 'Offline'}
             </Label>
           </div>
@@ -210,7 +262,14 @@ export default function ReaderDashboard() {
             
             <TabsContent value="upcoming">
               {getUpcomingSessions().length === 0 ? (
-                <p>No upcoming sessions found.</p>
+                <div className="text-center py-12">
+                  <p className="text-gray-500">No upcoming sessions found.</p>
+                  {!isOnline && (
+                    <p className="mt-2 text-sm">
+                      You are currently offline. Toggle your status to online to receive new session requests.
+                    </p>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-4">
                   {getUpcomingSessions().map((session) => (
@@ -222,8 +281,13 @@ export default function ReaderDashboard() {
                             Requested: {formatDate(session.requestedAt)}
                           </p>
                           <p className="text-sm mt-1">
-                            Session Type: {session.sessionType}
+                            Session Type: <span className="capitalize">{session.sessionType}</span>
                           </p>
+                          {session.notes && (
+                            <p className="text-sm mt-1">
+                              Notes: {session.notes}
+                            </p>
+                          )}
                           <div className="mt-2">
                             {getSessionStatusBadge(session.status)}
                           </div>
@@ -234,9 +298,7 @@ export default function ReaderDashboard() {
                             <Button 
                               variant="outline" 
                               size="sm"
-                              onClick={() => {
-                                // Accept session logic
-                              }}
+                              onClick={() => handleAcceptSession(session.id)}
                             >
                               Accept
                             </Button>
@@ -259,7 +321,9 @@ export default function ReaderDashboard() {
             
             <TabsContent value="past">
               {getPastSessions().length === 0 ? (
-                <p>No past sessions found.</p>
+                <div className="text-center py-12">
+                  <p className="text-gray-500">No past sessions found.</p>
+                </div>
               ) : (
                 <div className="space-y-4">
                   {getPastSessions().map((session) => (
