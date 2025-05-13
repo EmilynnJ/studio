@@ -1,0 +1,193 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: var(--font-playfair-display), serif;
+}
+
+@layer base {
+  :root {
+    --background: 260 60% 8%; /* Very Dark Indigo/Deep Purple */
+    --foreground: 300 30% 95%; /* Light Lavender/Off-white */
+
+    --card: 260 55% 12%; /* Darker card background */
+    --card-foreground: 300 30% 95%;
+
+    --popover: 260 50% 10%; /* Dark popover */
+    --popover-foreground: 300 30% 95%;
+
+    --primary: 330 90% 65%; /* Vibrant Mystical Pink (Red/Peach Pink variant) */
+    --primary-foreground: 330 30% 98%; /* Very light pink/white for contrast on primary */
+
+    --secondary: 270 50% 30%; /* Muted Purple */
+    --secondary-foreground: 300 30% 95%;
+
+    --muted: 260 50% 25%; /* Darker Muted Purple */
+    --muted-foreground: 300 20% 75%; /* Softer Lavender Gray */
+
+    --accent: 50 100% 65%; /* Mystical Gold */
+    --accent-foreground: 50 60% 10%; /* Dark Brown/Bronze for contrast on gold */
+
+    --destructive: 0 70% 55%; /* Deep Red */
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 270 40% 35%; /* Purple-ish border */
+    --input: 260 50% 18%; /* Dark input background */
+    --ring: 330 80% 70%; /* Pink ring for focus */
+
+    --radius: 0.75rem; /* Slightly more rounded */
+
+    /* Specific SoulSeer colors */
+    --soulseer-logo-pink: 330 90% 65%; /* For "SoulSeer" logo text */
+    --soulseer-header-pink: 330 95% 60%; /* Alex Brush headers - Richer Red/Peach Pink */
+    --soulseer-gold: 50 100% 65%; /* Same as accent */
+    --soulseer-magenta-glow: 320 100% 55%; /* For glowing effects if needed */
+
+    --chart-1: var(--primary);
+    --chart-2: var(--accent);
+    --chart-3: 300 70% 60%; /* Lavender */
+    --chart-4: 220 70% 65%; /* Mystical Blue */
+    --chart-5: 0 0% 80%; /* Light Gray */
+
+    /* Sidebar variables - consistent with new theme */
+    --sidebar-background: 260 60% 6%;
+    --sidebar-foreground: 300 30% 90%;
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: 260 50% 15%;
+    --sidebar-accent-foreground: 300 30% 95%;
+    --sidebar-border: 270 40% 25%;
+    --sidebar-ring: var(--ring);
+
+    --header-height: 4rem; /* 64px for small screens */
+    --footer-height: 15rem; /* Approximate footer height for small screens */
+  }
+
+  @media (min-width: 640px) { /* sm breakpoint */
+    :root {
+      --header-height: 5rem; /* 80px for sm and up */
+       --footer-height: 13rem; /* Approximate footer height for larger screens */
+    }
+  }
+
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-playfair-display), serif;
+  }
+
+  /* Global background image for the app */
+  body.app-background { 
+    background-image: url('https://i.postimg.cc/8cjhG9Dw/background-image.png'); 
+    background-size: cover;
+    background-attachment: fixed;
+    background-position: center;
+    position: relative; 
+  }
+  
+  body.app-background::before {
+    content: '';
+    position: fixed; 
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: hsla(var(--background), 0.75); /* Increased opacity for darker overlay */
+    z-index: -10; 
+  }
+  
+   main, header, footer {
+    position: relative;
+    z-index: 1; /* Ensure content is above the ::before pseudo-element */
+  }
+
+  h1, h2, h3, h4, h5, h6, .page-title-text, .main-header-text { 
+    font-family: var(--font-alex-brush), cursive;
+    color: hsl(var(--soulseer-header-pink));
+    /* Enhanced white halo glow effect */
+    text-shadow: 
+      0 0 3px hsl(var(--foreground) / 0.8), 
+      0 0 6px hsl(var(--foreground) / 0.6),
+      0 0 9px hsl(var(--foreground) / 0.4),
+      0 0 12px hsl(var(--foreground) / 0.2);
+  }
+  
+  .soulseer-tagline {
+    font-family: var(--font-playfair-display), serif;
+    font-size: 1.125rem; /* Adjusted for slightly better mobile */
+    @media (min-width: 640px) { /* sm breakpoint */
+      font-size: 1.25rem;
+    }
+    color: hsl(var(--foreground) / 0.9);
+    text-shadow: 1px 1px 3px hsla(var(--background), 0.5);
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+::-webkit-scrollbar {
+  width: 8px; /* Slightly thinner for a cleaner look */
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--background) / 0.5); /* More subtle track */
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.5); /* More subtle thumb */
+  border-radius: 10px;
+  border: 1px solid hsl(var(--background) / 0.5); /* Subtle border */
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.7); /* Slightly darker on hover */
+}
+
+
+.soulseer-tabs-trigger[data-state="active"] {
+  border-bottom-color: hsl(var(--soulseer-gold)) !important;
+  color: hsl(var(--soulseer-gold)) !important;
+  background-color: transparent !important; 
+}
+
+.soulseer-tabs-trigger {
+  padding-bottom: 0.5rem; 
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+  border-bottom-color: transparent;
+  transition: border-color 0.3s ease, color 0.3s ease;
+}
+.soulseer-tabs-trigger:hover {
+   color: hsl(var(--soulseer-gold) / 0.8);
+}
+
+.soulseer-section-title {
+  font-family: var(--font-alex-brush), cursive;
+  font-size: 2rem; /* Adjusted for mobile */
+   @media (min-width: 768px) { /* md breakpoint */
+    font-size: 2.5rem; /* 40px */
+  }
+  color: hsl(var(--primary)); /* Will inherit halo from h1-h6 styles */
+  margin-bottom: 1rem; /* Adjusted for mobile */
+   @media (min-width: 768px) { /* md breakpoint */
+     margin-bottom: 1.5rem; /* 24px */
+  }
+  text-align: left; 
+}
+
+@layer utilities {
+  .text-halo-white {
+    text-shadow: 
+      0 0 3px hsl(var(--foreground) / 0.8), 
+      0 0 6px hsl(var(--foreground) / 0.6),
+      0 0 9px hsl(var(--foreground) / 0.4),
+      0 0 12px hsl(var(--foreground) / 0.2);
+  }
+}

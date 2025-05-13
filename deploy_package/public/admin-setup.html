@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoulSeer Admin Setup</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background-color: #1e1e1e;
+      border-radius: 8px;
+      padding: 2rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+    h1 {
+      color: #ff69b4;
+      text-align: center;
+      margin-top: 0;
+    }
+    .status {
+      margin: 1rem 0;
+      padding: 1rem;
+      border-radius: 4px;
+    }
+    .success {
+      background-color: rgba(0, 255, 0, 0.1);
+      border: 1px solid #00ff00;
+    }
+    .error {
+      background-color: rgba(255, 0, 0, 0.1);
+      border: 1px solid #ff0000;
+    }
+    .loading {
+      display: flex;
+      justify-content: center;
+      margin: 1rem 0;
+    }
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      border-top: 4px solid #ff69b4;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    button {
+      background-color: #ff69b4;
+      color: white;
+      border: none;
+      padding: 0.75rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      width: 100%;
+      margin-top: 1rem;
+    }
+    button:hover {
+      background-color: #ff4da6;
+    }
+    button:disabled {
+      background-color: #666;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SoulSeer Admin Setup</h1>
+    <div id="status"></div>
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+    </div>
+    <button id="setupButton" disabled>Setting up admin...</button>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const statusDiv = document.getElementById('status');
+      const loadingDiv = document.getElementById('loading');
+      const setupButton = document.getElementById('setupButton');
+      
+      // Firebase configuration
+      const firebaseConfig = {
+        apiKey: "AIzaSyC_FoWo180V79D85l2N0ZAz8gVTxOdlnM0",
+        authDomain: "soulseer-2c4ed.firebaseapp.com",
+        projectId: "soulseer-2c4ed",
+        storageBucket: "soulseer-2c4ed.appspot.com",
+        messagingSenderId: "81229695823",
+        appId: "1:81229695823:web:0f767ea0512c3a4f2b533a",
+        measurementId: "G-VFGKGNEY0D"
+      };
+      
+      // Initialize Firebase
+      firebase.initializeApp(firebaseConfig);
+      
+      // Admin credentials
+      const adminEmail = 'emilynn992@gmail.com';
+      const adminPassword = 'JayJas1423!';
+      
+      async function setupAdmin() {
+        try {
+          // Try to create a new admin user
+          try {
+            const userCredential = await firebase.auth().createUserWithEmailAndPassword(adminEmail, adminPassword);
+            const user = userCredential.user;
+            
+            // Create admin document
+            await firebase.firestore().collection('users').doc(user.uid).set({
+              uid: user.uid,
+              email: adminEmail,
+              name: 'Admin User',
+              role: 'admin',
+              createdAt: new Date()
+            });
+            
+            showSuccess('Admin account created successfully!');
+          } catch (createError) {
+            // If email already exists, try to sign in and update role
+            if (createError.code === 'auth/email-already-in-use') {
+              try {
+                const userCredential = await firebase.auth().signInWithEmailAndPassword(adminEmail, adminPassword);
+                const user = userCredential.user;
+                
+                // Update admin document
+                await firebase.firestore().collection('users').doc(user.uid).set({
+                  uid: user.uid,
+                  email: adminEmail,
+                  name: 'Admin User',
+                  role: 'admin',
+                  updatedAt: new Date()
+                }, { merge: true });
+                
+                showSuccess('Admin role updated successfully!');
+              } catch (signInError) {
+                showError(`Failed to sign in with admin credentials: ${signInError.message}`);
+              }
+            } else {
+              showError(`Failed to create admin account: ${createError.message}`);
+            }
+          }
+        } catch (error) {
+          showError(`Error setting up admin: ${error.message}`);
+        }
+      }
+      
+      function showSuccess(message) {
+        statusDiv.innerHTML = `<div class="status success">${message}</div>`;
+        loadingDiv.style.display = 'none';
+        setupButton.disabled = false;
+        setupButton.textContent = 'Go to Admin Dashboard';
+        setupButton.addEventListener('click', function() {
+          window.location.href = '/admin';
+        });
+      }
+      
+      function showError(message) {
+        statusDiv.innerHTML = `<div class="status error">${message}</div>`;
+        loadingDiv.style.display = 'none';
+        setupButton.disabled = false;
+        setupButton.textContent = 'Retry Setup';
+        setupButton.addEventListener('click', function() {
+          statusDiv.innerHTML = '';
+          loadingDiv.style.display = 'flex';
+          setupButton.disabled = true;
+          setupButton.textContent = 'Setting up admin...';
+          setupAdmin();
+        });
+      }
+      
+      // Start setup process
+      setupAdmin();
+    });
+  </script>
+</body>
+</html>

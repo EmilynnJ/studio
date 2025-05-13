@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SoulSeer Admin Setup</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #121212;
+      color: white;
+    }
+    h1 {
+      color: #ff69b4;
+    }
+    button {
+      background-color: #ff69b4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    #status {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .success {
+      background-color: rgba(0, 255, 0, 0.2);
+      border: 1px solid green;
+    }
+    .error {
+      background-color: rgba(255, 0, 0, 0.2);
+      border: 1px solid red;
+    }
+  </style>
+</head>
+<body>
+  <h1>SoulSeer Admin Setup</h1>
+  <p>This page will set up the admin account for SoulSeer.</p>
+  
+  <button id="setupButton">Set Up Admin Account</button>
+  <div id="status"></div>
+  
+  <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyC_FoWo180V79D85l2N0ZAz8gVTxOdlnM0",
+      authDomain: "soulseer-2c4ed.firebaseapp.com",
+      projectId: "soulseer-2c4ed",
+      storageBucket: "soulseer-2c4ed.appspot.com",
+      messagingSenderId: "81229695823",
+      appId: "1:81229695823:web:0f767ea0512c3a4f2b533a",
+      measurementId: "G-VFGKGNEY0D"
+    };
+    
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    
+    // Admin credentials
+    const adminEmail = "emilynn992@gmail.com";
+    const adminPassword = "JayJas1423!";
+    
+    document.getElementById('setupButton').addEventListener('click', async function() {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerHTML = "Setting up admin account...";
+      statusDiv.className = "";
+      
+      try {
+        // Try to sign in with admin credentials
+        try {
+          const userCredential = await firebase.auth().signInWithEmailAndPassword(adminEmail, adminPassword);
+          const user = userCredential.user;
+          
+          // Update user document in Firestore
+          await firebase.firestore().collection('users').doc(user.uid).set({
+            uid: user.uid,
+            email: adminEmail,
+            name: 'Admin User',
+            role: 'admin',
+            updatedAt: new Date()
+          }, { merge: true });
+          
+          statusDiv.innerHTML = "Admin role set successfully! You can now access the admin dashboard.";
+          statusDiv.className = "success";
+        } catch (signInError) {
+          // If sign in fails, try to create the user
+          if (signInError.code === 'auth/user-not-found') {
+            try {
+              const userCredential = await firebase.auth().createUserWithEmailAndPassword(adminEmail, adminPassword);
+              const user = userCredential.user;
+              
+              // Update user profile
+              await user.updateProfile({
+                displayName: 'Admin User'
+              });
+              
+              // Create user document in Firestore
+              await firebase.firestore().collection('users').doc(user.uid).set({
+                uid: user.uid,
+                email: adminEmail,
+                name: 'Admin User',
+                role: 'admin',
+                createdAt: new Date(),
+                updatedAt: new Date()
+              });
+              
+              statusDiv.innerHTML = "Admin account created successfully! You can now access the admin dashboard.";
+              statusDiv.className = "success";
+            } catch (createError) {
+              statusDiv.innerHTML = `Error creating admin account: ${createError.message}`;
+              statusDiv.className = "error";
+            }
+          } else {
+            statusDiv.innerHTML = `Error signing in: ${signInError.message}`;
+            statusDiv.className = "error";
+          }
+        }
+      } catch (error) {
+        statusDiv.innerHTML = `Error: ${error.message}`;
+        statusDiv.className = "error";
+      }
+    });
+  </script>
+</body>
+</html>
