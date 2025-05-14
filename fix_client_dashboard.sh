@@ -1,3 +1,9 @@
+#!/bin/bash
+
+echo "Creating a fixed client-dashboard page..."
+
+# Create a new client-dashboard page with correct imports
+cat > deploy/src/app/\(main\)/client-dashboard/page.tsx << 'CLIENTDASHBOARD'
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -266,3 +272,6 @@ export default function ClientDashboard() {
     </div>
   );
 }
+CLIENTDASHBOARD
+
+echo "Fixed client-dashboard page created."
