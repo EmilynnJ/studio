@@ -1,15 +1,21 @@
-# SoulSeer Deployment Package
+# SoulSeer Deployment
 
-This package contains a fixed version of the SoulSeer application for deployment.
+This is the deployment package for SoulSeer.
 
-## Setup Instructions
+## Deployment Instructions
 
-1. Upload this package to your Render project
-2. Set all required environment variables in the Render dashboard
-3. Deploy the application
+1. Make sure all environment variables are set in the Render dashboard:
+   - Firebase configuration
+   - Stripe keys
+   - WebRTC configuration
 
-## Admin Setup
+2. The build command is: `npm install; npm run build`
+3. The start command is: `npm start`
 
-After deployment:
-1. Access `/admin-setup.html` to set up the admin account
-2. Log in with your admin credentials
+## Troubleshooting
+
+If you encounter build errors related to module resolution:
+
+1. Check that all import paths are correct (no spaces after the @ symbol)
+2. Ensure next.config.js is properly configured
+3. Verify that all UI components are present in the src/components/ui directory
