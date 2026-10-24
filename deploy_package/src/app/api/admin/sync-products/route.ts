@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/server-auth';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -7,9 +8,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 
 export async function POST(request: Request) {
   try {
-    // Check if the current user is an admin (you might want to implement this)
-    // This is a simplified version - in production, you'd verify the admin status
-    
+    const denied = await requireAdmin(request);
+    if (denied) return denied;
+
     // Fetch all products from Stripe
     const stripeProducts = await stripe.products.list({
       active: true,

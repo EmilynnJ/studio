@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/server-auth';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/firebase';
 
 export async function POST(request: Request) {
   try {
-    // Check if the current user is an admin (you might want to implement this)
-    // This is a simplified version - in production, you'd verify the admin status
-    
+    const denied = await requireAdmin(request);
+    if (denied) return denied;
+
     const { email, password, displayName } = await request.json();
     
     if (!email || !password || !displayName) {
