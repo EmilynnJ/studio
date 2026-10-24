@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/server-auth';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/firebase';
 
 export async function GET(request: Request) {
   try {
+    const denied = await requireAdmin(request);
+    if (denied) return denied;
+
     // Get admin credentials from environment variables
     const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
