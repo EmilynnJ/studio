@@ -11,7 +11,7 @@ export const config = {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2022-11-15',
 });
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+const endpointSecret = process.env.STRIPE_WEBHOOK_SIGNING_SECRET || '';
 
 export async function POST(request: Request) {
   const payload = await request.text();
